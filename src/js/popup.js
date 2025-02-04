@@ -124,62 +124,59 @@ document.addEventListener('DOMContentLoaded', function() {
   createContainers();
 
   // 获取所有需要的DOM元素
-  const contractInput = document.getElementById('contractAddress');
-  const searchBtn = document.getElementById('searchBtn');
-  const smartMoneyInfo = document.getElementById('smartMoneyInfo');
-  const socialInfo = document.getElementById('socialInfo');
-  const loading = document.getElementById('loading');
-  const error = document.getElementById('error');
-  const errorText = error.querySelector('.error-text');
-  const retryBtn = document.getElementById('retryBtn');
-  const smartMoneyCount = document.getElementById('smartMoneyCount');
-  const socialCount = document.getElementById('socialCount');
-  const tokenInfoContainer = document.getElementById('tokenInfoContainer');
-  const tradeInfoContainer = document.getElementById('tradeInfoContainer');
+  const DOM_ELEMENTS = {
+    contractInput: document.getElementById('contractAddress'),
+    searchBtn: document.getElementById('searchBtn'),
+    tokenInfoContainer: document.getElementById('tokenInfoContainer'),
+    devInfo: document.getElementById('devInfo'),
+    smartMoneyInfo: document.getElementById('smartMoneyInfo'),
+    loading: document.getElementById('loading'),
+    error: document.getElementById('error'),
+    errorText: document.querySelector('#error .error-text'),
+    retryBtn: document.getElementById('retryBtn'),
+    smartMoneyCount: document.getElementById('smartMoneyCount')
+  };
+
+  // 测试所有DOM元素是否正确获取
+  console.log('DOM元素检查:', {
+    contractInput: !!DOM_ELEMENTS.contractInput,
+    searchBtn: !!DOM_ELEMENTS.searchBtn,
+    tokenInfoContainer: !!DOM_ELEMENTS.tokenInfoContainer,
+    devInfo: !!DOM_ELEMENTS.devInfo,
+    smartMoneyInfo: !!DOM_ELEMENTS.smartMoneyInfo,
+    loading: !!DOM_ELEMENTS.loading,
+    error: !!DOM_ELEMENTS.error,
+    errorText: !!DOM_ELEMENTS.errorText,
+    retryBtn: !!DOM_ELEMENTS.retryBtn,
+    smartMoneyCount: !!DOM_ELEMENTS.smartMoneyCount
+  });
+
+  // 检查必要的DOM元素是否存在
+  const requiredElements = ['contractInput', 'searchBtn', 'loading', 'error', 'errorText', 'retryBtn'];
+  const missingElements = requiredElements.filter(id => !DOM_ELEMENTS[id]);
+  
+  if (missingElements.length > 0) {
+    console.error('缺少必要的DOM元素:', missingElements.join(', '));
+  }
 
   // 添加loading相关函数
   function showLoading() {
-    if (loading) {
-      loading.style.display = 'flex';
+    if (DOM_ELEMENTS.loading) {
+      DOM_ELEMENTS.loading.style.display = 'flex';
     }
   }
 
   function hideLoading() {
-    if (loading) {
-      loading.style.display = 'none';
+    if (DOM_ELEMENTS.loading) {
+      DOM_ELEMENTS.loading.style.display = 'none';
     }
   }
 
   // 清除结果的函数
   function clearResults() {
-    if (tokenInfoContainer) tokenInfoContainer.innerHTML = '';
-    if (tradeInfoContainer) tradeInfoContainer.innerHTML = '';
-    if (smartMoneyInfo) smartMoneyInfo.innerHTML = '';
-    if (socialInfo) socialInfo.innerHTML = '';
-    if (smartMoneyCount) smartMoneyCount.textContent = '0';
-    if (socialCount) socialCount.textContent = '0';
-  }
-
-  // 检查所有必要的DOM元素是否存在
-  const requiredElements = {
-    contractInput,
-    searchBtn,
-    smartMoneyInfo,
-    socialInfo,
-    loading,
-    error,
-    errorText,
-    retryBtn,
-    smartMoneyCount,
-    socialCount,
-    tokenInfoContainer,
-    tradeInfoContainer
-  };
-
-  for (const [name, element] of Object.entries(requiredElements)) {
-    if (!element) {
-      console.error(`缺少必要的DOM元素: ${name}`);
-    }
+    if (DOM_ELEMENTS.tokenInfoContainer) DOM_ELEMENTS.tokenInfoContainer.innerHTML = '';
+    if (DOM_ELEMENTS.smartMoneyInfo) DOM_ELEMENTS.smartMoneyInfo.innerHTML = '';
+    if (DOM_ELEMENTS.smartMoneyCount) DOM_ELEMENTS.smartMoneyCount.textContent = '0';
   }
 
   // 添加样式
@@ -747,33 +744,20 @@ document.addEventListener('DOMContentLoaded', function() {
     img.src = 'images/default-avatar.png';
   }
 
-  // 测试所有DOM元素是否正确获取
-  console.log('DOM元素检查:', {
-    contractInput: !!contractInput,
-    searchBtn: !!searchBtn,
-    smartMoneyInfo: !!smartMoneyInfo,
-    socialInfo: !!socialInfo,
-    loading: !!loading,
-    error: !!error,
-    errorText: !!errorText,
-    retryBtn: !!retryBtn,
-    smartMoneyCount: !!smartMoneyCount
-  });
-
   let lastSearchAddress = '';
 
   // 从storage中获取上次搜索的地址（仅在扩展环境中）
   if (isExtensionEnvironment) {
     chrome.storage.local.get(['lastAddress'], function(result) {
-      if (result.lastAddress) {
-        contractInput.value = result.lastAddress;
+      if (result.lastAddress && DOM_ELEMENTS.contractInput) {
+        DOM_ELEMENTS.contractInput.value = result.lastAddress;
       }
     });
   } else {
     // 在非扩展环境中，尝试从localStorage获取上次搜索的地址
     const lastAddress = localStorage.getItem('lastAddress');
-    if (lastAddress) {
-      contractInput.value = lastAddress;
+    if (lastAddress && DOM_ELEMENTS.contractInput) {
+      DOM_ELEMENTS.contractInput.value = lastAddress;
     }
   }
 
@@ -813,7 +797,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // 显示代币信息
   function displayTokenInfo(tokenInfo) {
-    const container = document.getElementById('tokenInfoContainer');
+    const container = DOM_ELEMENTS.tokenInfoContainer;
     if (!container) return;
 
     // 获取代币基本信息
@@ -1168,14 +1152,14 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // 添加格式化市值的函数
+  // 修改格式化市值的函数
   function formatMarketCap(marketCap) {
     if (marketCap >= 1000000) {
       return (marketCap / 1000000).toFixed(1) + 'M';
-    } else if (marketCap >= 1000) {
+    } else {
+      // 所有小于1M的数值都用K为单位
       return (marketCap / 1000).toFixed(1) + 'K';
     }
-    return marketCap.toFixed(1);
   }
 
   // 添加获取Dev信息的函数
@@ -1193,13 +1177,13 @@ document.addEventListener('DOMContentLoaded', function() {
   // 添加显示Dev信息的函数
   async function displayDevInfo(devData) {
     try {
-      const devContainer = document.getElementById('devInfo');
+      const devContainer = DOM_ELEMENTS.devInfo;
       if (!devContainer) return;
 
       // 计算统计信息
       const totalProjects = devData.length;
       const successProjects = devData.filter(project => project.complete).length;
-      const maxMarketCap = Math.max(...devData.map(project => project.market_cap));
+      const maxMarketCap = Math.max(...devData.map(project => project.usd_market_cap || 0));
 
       // 更新标题
       const devTitle = document.getElementById('devTitle');
@@ -1248,8 +1232,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
       // 排序项目（按市值和时间倒序）
       const sortedProjects = [...devData].sort((a, b) => {
-        if (b.market_cap !== a.market_cap) {
-          return b.market_cap - a.market_cap;
+        if ((b.usd_market_cap || 0) !== (a.usd_market_cap || 0)) {
+          return (b.usd_market_cap || 0) - (a.usd_market_cap || 0);
         }
         return b.created_timestamp - a.created_timestamp;
       });
@@ -1270,7 +1254,7 @@ document.addEventListener('DOMContentLoaded', function() {
       for (const project of sortedProjects) {
         const timeString = getRelativeTimeString(project.created_timestamp / 1000);
         const isSuccess = project.complete;
-        const isHighValue = project.market_cap >= 1000000; // 超过1M
+        const isHighValue = (project.usd_market_cap || 0) >= 1000000; // 超过1M
 
         const rowClass = [
           isSuccess ? 'success' : '',
@@ -1280,7 +1264,7 @@ document.addEventListener('DOMContentLoaded', function() {
         html += `
           <tr class="${rowClass}">
             <td>${project.name}</td>
-            <td>${formatMarketCap(project.market_cap)}</td>
+            <td>${formatMarketCap(project.usd_market_cap || 0)}</td>
             <td>${timeString}</td>
           </tr>
         `;
@@ -1294,7 +1278,7 @@ document.addEventListener('DOMContentLoaded', function() {
       devContainer.innerHTML = html;
     } catch (error) {
       console.error('显示Dev信息失败:', error);
-      document.getElementById('devInfo').innerHTML = `
+      DOM_ELEMENTS.devInfo.innerHTML = `
         <div class="error-message">
           <p>显示Dev信息失败: ${error.message}</p>
         </div>
@@ -1309,13 +1293,13 @@ document.addEventListener('DOMContentLoaded', function() {
       createContainers();
 
       // 显示加载状态
-      document.getElementById('loading').classList.remove('hidden');
+      DOM_ELEMENTS.loading.classList.remove('hidden');
       
       // 重置所有区域
-      document.getElementById('tokenInfoContainer').innerHTML = '';
-      document.getElementById('devInfo').innerHTML = '';
-      document.getElementById('smartMoneyInfo').innerHTML = '';
-      document.getElementById('smartMoneyCount').textContent = '';
+      DOM_ELEMENTS.tokenInfoContainer.innerHTML = '';
+      DOM_ELEMENTS.devInfo.innerHTML = '';
+      DOM_ELEMENTS.smartMoneyInfo.innerHTML = '';
+      DOM_ELEMENTS.smartMoneyCount.textContent = '';
       
       // 显示各个区域的加载动画
       document.getElementById('tokenInfoLoading').classList.add('active');
@@ -1353,11 +1337,11 @@ document.addEventListener('DOMContentLoaded', function() {
               await displayDevInfo(devData);
             } else {
               console.error('Dev数据格式不正确:', devData);
-              document.getElementById('devInfo').innerHTML = '<p class="no-data">暂无Dev数据</p>';
+              DOM_ELEMENTS.devInfo.innerHTML = '<p class="no-data">暂无Dev数据</p>';
             }
           } catch (error) {
             console.error('获取Dev信息失败:', error);
-            document.getElementById('devInfo').innerHTML = `
+            DOM_ELEMENTS.devInfo.innerHTML = `
               <div class="error-message">
                 <p>获取Dev信息失败: ${error.message}</p>
               </div>
@@ -1366,11 +1350,11 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
           console.warn('未找到creator信息');
           document.getElementById('devTitle').innerHTML = 'Dev <span style="font-size: 12px; color: #666; font-weight: normal;">(未找到开发者地址)</span>';
-          document.getElementById('devInfo').innerHTML = '<p class="no-data">未找到Dev信息</p>';
+          DOM_ELEMENTS.devInfo.innerHTML = '<p class="no-data">未找到Dev信息</p>';
         }
       } else {
         console.warn('获取代币信息失败');
-        document.getElementById('tokenInfoContainer').innerHTML = `
+        DOM_ELEMENTS.tokenInfoContainer.innerHTML = `
           <div class="error-message">
             <p>获取代币信息失败</p>
           </div>
@@ -1388,7 +1372,7 @@ document.addEventListener('DOMContentLoaded', function() {
         await displaySmartMoneyData(smartMoneyData.data);
       } else {
         console.warn('获取聪明钱数据失败:', smartMoneyData?.error);
-        document.getElementById('smartMoneyInfo').innerHTML = `
+        DOM_ELEMENTS.smartMoneyInfo.innerHTML = `
           <div class="error-message">
             <p>获取聪明钱数据失败: ${smartMoneyData?.error || '未知错误'}</p>
           </div>
@@ -1396,7 +1380,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
 
       // 隐藏加载状态
-      document.getElementById('loading').classList.add('hidden');
+      DOM_ELEMENTS.loading.classList.add('hidden');
 
     } catch (error) {
       console.error('搜索处理失败:', error);
@@ -1405,14 +1389,14 @@ document.addEventListener('DOMContentLoaded', function() {
       // 隐藏所有加载动画
       document.getElementById('tokenInfoLoading').classList.remove('active');
       document.getElementById('smartMoneyLoading').classList.remove('active');
-      document.getElementById('loading').classList.add('hidden');
+      DOM_ELEMENTS.loading.classList.add('hidden');
     }
   }
 
   // 搜索按钮点击事件
-  searchBtn.addEventListener('click', async function() {
+  DOM_ELEMENTS.searchBtn.addEventListener('click', async function() {
     console.log('搜索按钮被点击');
-    const address = contractInput.value.trim();
+    const address = DOM_ELEMENTS.contractInput.value.trim();
     if (!address) {
       showError('请输入合约地址');
       return;
@@ -1437,7 +1421,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // 重试按钮点击事件
-  retryBtn.addEventListener('click', async function() {
+  DOM_ELEMENTS.retryBtn.addEventListener('click', async function() {
     if (lastSearchAddress) {
       await performSearch(lastSearchAddress);
     }
@@ -1489,10 +1473,10 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function showError(message) {
-    error.classList.remove('hidden');
-    errorText.textContent = message;
+    DOM_ELEMENTS.error.classList.remove('hidden');
+    DOM_ELEMENTS.errorText.textContent = message;
     setTimeout(() => {
-      error.classList.add('hidden');
+      DOM_ELEMENTS.error.classList.add('hidden');
     }, 3000);
   }
 
@@ -1511,10 +1495,10 @@ document.addEventListener('DOMContentLoaded', function() {
       const addressLabelsMap = data[0].result.data.json.data.renderContext.addressLabelsMap || {};
       
       // 更新交易计数
-      document.getElementById('smartMoneyCount').textContent = transactions.length.toString();
+      DOM_ELEMENTS.smartMoneyCount.textContent = transactions.length.toString();
 
       if (transactions.length === 0) {
-        document.getElementById('smartMoneyInfo').innerHTML = '<p class="no-data">暂无聪明钱数据</p>';
+        DOM_ELEMENTS.smartMoneyInfo.innerHTML = '<p class="no-data">暂无聪明钱数据</p>';
         return;
       }
 
@@ -1697,11 +1681,11 @@ document.addEventListener('DOMContentLoaded', function() {
           </tbody>
         </table>
       `;
-      document.getElementById('smartMoneyInfo').innerHTML = html;
+      DOM_ELEMENTS.smartMoneyInfo.innerHTML = html;
       
     } catch (error) {
       console.error('显示智能钱包数据失败:', error);
-      document.getElementById('smartMoneyInfo').innerHTML = `
+      DOM_ELEMENTS.smartMoneyInfo.innerHTML = `
         <div class="error-message">
           <p>显示智能钱包数据失败: ${error.message}</p>
         </div>
@@ -1712,7 +1696,7 @@ document.addEventListener('DOMContentLoaded', function() {
   async function displayTradeInfo(data) {
     try {
       console.log('开始显示交易信息');
-      const tokenInfoContainer = document.getElementById('tokenInfoContainer');
+      const tokenInfoContainer = DOM_ELEMENTS.tokenInfoContainer;
       if (!tokenInfoContainer) {
         console.warn('未找到代币信息容器');
         return;
@@ -1777,7 +1761,7 @@ document.addEventListener('DOMContentLoaded', function() {
       tokenInfoContainer.innerHTML = html;
     } catch (error) {
       console.error('显示交易信息失败:', error);
-      const tokenInfoContainer = document.getElementById('tokenInfoContainer');
+      const tokenInfoContainer = DOM_ELEMENTS.tokenInfoContainer;
       if (tokenInfoContainer) {
         tokenInfoContainer.innerHTML = `
           <div class="error-message">
