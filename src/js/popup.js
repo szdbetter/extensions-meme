@@ -1333,14 +1333,16 @@ document.addEventListener('DOMContentLoaded', function() {
           border-radius: 8px;
           overflow: hidden;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+          font-size: 14px;
         }
 
         .transactions-table th,
         .transactions-table td {
-          padding: 12px;
+          padding: 14px;
           text-align: left;
           border-bottom: 1px solid #eee;
           color: #000;
+          font-size: 1.1em;
         }
 
         .transactions-table th {
@@ -1350,8 +1352,12 @@ document.addEventListener('DOMContentLoaded', function() {
           border-bottom: 2px solid #eee;
         }
 
-        .transactions-table tr:hover {
-          background: #f8f9fa;
+        .transactions-table tr.buy-row {
+          transition: background-color 0.3s;
+        }
+
+        .transactions-table tr.sell-row {
+          transition: background-color 0.3s;
         }
 
         .transactions-table tr:last-child td {
@@ -1360,10 +1366,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
         .tx-type-cell {
           display: inline-block;
-          padding: 4px 8px;
+          padding: 4px 12px;
           border-radius: 4px;
-          font-size: 0.9em;
-          font-weight: 500;
+          font-size: 1em;
+          font-weight: 600;
         }
 
         .tx-type-cell.buy {
@@ -1404,6 +1410,12 @@ document.addEventListener('DOMContentLoaded', function() {
       }
       smartMoneyTitle.innerHTML = `聪明钱（<span class="smart-money-title-buy">${buyText}</span>,<span class="smart-money-title-sell">${sellText}</span>)`;
 
+      // 找出最大交易量，用于计算颜色深度
+      const maxVolume = Math.max(...transactions.map(tx => {
+        if (!tx || !tx.events || !tx.events[0] || !tx.events[0].data) return 0;
+        return tx.events[0].data.order?.volume_native || 0;
+      }));
+
       // 构建表格HTML
       let html = `
         <table class="transactions-table">
@@ -1443,6 +1455,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const price = event.data.order?.price_usd?.toFixed(4) || '未知';
         const volume_native = event.data.order?.volume_native || 0;
         
+        // 计算颜色深度（0.1到0.3之间）
+        const opacity = 0.1 + (volume_native / maxVolume) * 0.2;
+        const bgColor = event.kind === 'token:buy' ? 
+          `rgba(34, 197, 94, ${opacity})` : 
+          `rgba(239, 68, 68, ${opacity})`;
+        
         // 获取地址标签
         let addressLabel = '未知';
         if (event.address && addressLabelsMap[event.address] && addressLabelsMap[event.address][0]) {
@@ -1450,7 +1468,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         html += `
-          <tr>
+          <tr class="${typeClass}-row" style="background-color: ${bgColor}">
             <td>${timeString}</td>
             <td><span class="tx-type-cell ${typeClass}">${type}</span></td>
             <td class="address-cell">
