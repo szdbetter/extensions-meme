@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Generate MEME Icons</title>
+</head>
+<body>
+    <canvas id="icon16" width="16" height="16"></canvas>
+    <canvas id="icon48" width="48" height="48"></canvas>
+    <canvas id="icon128" width="128" height="128"></canvas>
+    
+    <script>
+        function drawIcon(ctx, size) {
+            // 设置背景为渐变色
+            const gradient = ctx.createLinearGradient(0, 0, size, size);
+            gradient.addColorStop(0, '#4CAF50');
+            gradient.addColorStop(1, '#45a049');
+            ctx.fillStyle = gradient;
+            
+            // 绘制圆角矩形背景
+            ctx.beginPath();
+            const radius = size * 0.2;
+            ctx.moveTo(size, size - radius);
+            ctx.arcTo(size, size, 0, size, radius);
+            ctx.arcTo(0, size, 0, 0, radius);
+            ctx.arcTo(0, 0, size, 0, radius);
+            ctx.arcTo(size, 0, size, size, radius);
+            ctx.closePath();
+            ctx.fill();
+            
+            // 设置文本
+            ctx.fillStyle = 'white';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // 根据尺寸调整字体大小
+            const fontSize = Math.floor(size * 0.6);
+            ctx.font = `bold ${fontSize}px Arial`;
+            
+            // 添加阴影效果
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+            ctx.shadowBlur = size * 0.1;
+            ctx.shadowOffsetX = size * 0.05;
+            ctx.shadowOffsetY = size * 0.05;
+            
+            // 绘制文本
+            ctx.fillText('M', size/2, size/2);
+        }
+
+        function generateIcon(canvasId, size) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            drawIcon(ctx, size);
+            
+            // 转换为Blob
+            canvas.toBlob(function(blob) {
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(blob);
+                img.width = size;
+                img.height = size;
+                document.body.appendChild(img);
+            });
+        }
+        
+        // 生成三种尺寸的图标
+        generateIcon('icon16', 16);
+        generateIcon('icon48', 48);
+        generateIcon('icon128', 128);
+    </script>
+    
+    <div style="margin-top: 20px;">
+        <p>请右键点击上面生成的图标，选择"图片另存为"，并保存为对应的文件名（icon16.png、icon48.png、icon128.png）到 src/images/ 目录下。</p>
+    </div>
+</body>
+</html> 

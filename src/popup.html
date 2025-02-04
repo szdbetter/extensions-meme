@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Solana MEME Token Tracker</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="input-group">
+        <input type="text" id="contractAddress" placeholder="输入合约地址..." value="CBdCxKo9QavR9hfShgpEBG3zekorAeD7W1jfq2o3pump">
+        <button id="searchBtn">查询</button>
+      </div>
+    </div>
+    
+    <div class="results-container">
+      <div class="section token-info-section">
+        <div class="section-header">
+          <h2>代币信息</h2>
+        </div>
+        <div class="section-loading" id="tokenInfoLoading">
+          <div class="section-spinner"></div>
+        </div>
+        <div id="tokenInfoContainer" class="info-box"></div>
+      </div>
+
+      <div class="section smart-money-section">
+        <div class="section-header">
+          <h2>聪明钱信息</h2>
+          <span class="count" id="smartMoneyCount"></span>
+        </div>
+        <div class="section-loading" id="smartMoneyLoading">
+          <div class="section-spinner"></div>
+        </div>
+        <div id="smartMoneyInfo" class="info-box"></div>
+      </div>
+      
+      <div class="section social-info-section">
+        <div class="section-header">
+          <h2>社交媒体信息</h2>
+          <span class="count" id="socialCount"></span>
+        </div>
+        <div class="section-loading" id="socialLoading">
+          <div class="section-spinner"></div>
+        </div>
+        <div id="socialInfo" class="info-box"></div>
+      </div>
+    </div>
+    
+    <div id="loading" class="loading hidden">
+      <span class="spinner"></span>
+      <p>加载中...</p>
+    </div>
+
+    <div id="error" class="error-message hidden">
+      <p class="error-text"></p>
+      <button id="retryBtn" class="retry-button">重试</button>
+    </div>
+  </div>
+  
+  <!-- 添加调试信息显示区域 -->
+  <div id="debug" class="debug-section">
+    <h3>调试信息</h3>
+    <pre id="debugInfo"></pre>
+  </div>
+
+  <script src="js/popup.js"></script>
+</body>
+</html> 

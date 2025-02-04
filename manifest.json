@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "Solana Meme Tracker",
+  "version": "1.0",
+  "description": "跟踪Solana Meme代币信息",
+  "permissions": [
+    "contextMenus",
+    "storage",
+    "cookies"
+  ],
+  "host_permissions": [
+    "https://www.pump.fun/*",
+    "https://frontend-api-v3.pump.fun/*",
+    "https://www.pump.news/*",
+    "https://chain.fm/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_icon": {
+      "16": "images/icon16.png",
+      "48": "images/icon48.png",
+      "128": "images/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "src/js/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://gmgn.ai/*"],
+      "js": ["src/js/gmgn-bridge.js"]
+    }
+  ],
+  "icons": {
+    "16": "images/icon16.png",
+    "48": "images/icon48.png",
+    "128": "images/icon128.png"
+  }
+} 
