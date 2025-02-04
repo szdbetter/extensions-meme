@@ -6,6 +6,49 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // 首先创建必要的容器结构
   function createContainers() {
+    // 添加全局样式
+    const styleElement = document.createElement('style');
+    styleElement.textContent = `
+      .section {
+        margin-bottom: 20px;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+
+      .section-header {
+        padding: 16px;
+        border-bottom: 1px solid #eee;
+      }
+
+      .section-header h2 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+        color: #000;
+      }
+
+      .info-box {
+        padding: 16px;
+      }
+
+      .dev-info-section {
+        margin: 20px 0;
+      }
+
+      .dev-info-section .no-data,
+      .dev-info-section .error-message {
+        text-align: center;
+        padding: 20px;
+        color: #666;
+      }
+
+      .dev-info-section .error-message {
+        color: #ef4444;
+      }
+    `;
+    document.head.appendChild(styleElement);
+
     // 创建主结果容器（如果不存在）
     let resultsContainer = document.querySelector('.results-container');
     if (!resultsContainer) {
@@ -15,10 +58,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // 创建代币信息区域（如果不存在）
-    let tokenSection = document.querySelector('.token-info-section');
-    if (!tokenSection) {
-      tokenSection = document.createElement('div');
-      tokenSection.className = 'section token-info-section';
+    const tokenSection = document.querySelector('.token-info-section') || (() => {
+      const section = document.createElement('div');
+      section.className = 'section token-info-section';
       
       const tokenInfoTitle = document.createElement('div');
       tokenInfoTitle.className = 'section-header';
@@ -28,17 +70,35 @@ document.addEventListener('DOMContentLoaded', function() {
       tokenInfoContainer.id = 'tokenInfoContainer';
       tokenInfoContainer.className = 'info-box';
       
-      tokenSection.appendChild(tokenInfoTitle);
-      tokenSection.appendChild(tokenInfoContainer);
+      section.appendChild(tokenInfoTitle);
+      section.appendChild(tokenInfoContainer);
+      resultsContainer.appendChild(section);
+      return section;
+    })();
+
+    // 创建Dev信息区域（如果不存在）
+    const devSection = document.querySelector('.dev-info-section') || (() => {
+      const section = document.createElement('div');
+      section.className = 'section dev-info-section';
       
-      resultsContainer.appendChild(tokenSection);
-    }
+      const devTitle = document.createElement('div');
+      devTitle.className = 'section-header';
+      devTitle.innerHTML = '<h2 id="devTitle">Dev</h2>';
+      
+      const devContainer = document.createElement('div');
+      devContainer.id = 'devInfo';
+      devContainer.className = 'info-box';
+      
+      section.appendChild(devTitle);
+      section.appendChild(devContainer);
+      resultsContainer.appendChild(section);
+      return section;
+    })();
 
     // 创建智能钱包区域（如果不存在）
-    let smartMoneySection = document.querySelector('.smart-money-section');
-    if (!smartMoneySection) {
-      smartMoneySection = document.createElement('div');
-      smartMoneySection.className = 'section smart-money-section';
+    const smartMoneySection = document.querySelector('.smart-money-section') || (() => {
+      const section = document.createElement('div');
+      section.className = 'section smart-money-section';
       
       const smartMoneyTitle = document.createElement('div');
       smartMoneyTitle.className = 'section-header';
@@ -48,30 +108,15 @@ document.addEventListener('DOMContentLoaded', function() {
       smartMoneyContainer.id = 'smartMoneyInfo';
       smartMoneyContainer.className = 'info-box';
       
-      smartMoneySection.appendChild(smartMoneyTitle);
-      smartMoneySection.appendChild(smartMoneyContainer);
-      
-      resultsContainer.appendChild(smartMoneySection);
-    }
+      section.appendChild(smartMoneyTitle);
+      section.appendChild(smartMoneyContainer);
+      resultsContainer.appendChild(section);
+      return section;
+    })();
 
-    // 创建社交媒体区域（如果不存在）
-    let socialSection = document.querySelector('.social-info-section');
-    if (!socialSection) {
-      socialSection = document.createElement('div');
-      socialSection.className = 'section social-info-section';
-      
-      const socialTitle = document.createElement('div');
-      socialTitle.className = 'section-header';
-      socialTitle.innerHTML = '<h2>社交媒体信息</h2><span class="count" id="socialCount"></span>';
-      
-      const socialContainer = document.createElement('div');
-      socialContainer.id = 'socialInfo';
-      socialContainer.className = 'info-box';
-      
-      socialSection.appendChild(socialTitle);
-      socialSection.appendChild(socialContainer);
-      
-      resultsContainer.appendChild(socialSection);
+    // 重新排序容器：确保 Dev 区域在代币信息和聪明钱之间
+    if (devSection && smartMoneySection) {
+      resultsContainer.insertBefore(devSection, smartMoneySection);
     }
   }
 
@@ -712,8 +757,7 @@ document.addEventListener('DOMContentLoaded', function() {
     error: !!error,
     errorText: !!errorText,
     retryBtn: !!retryBtn,
-    smartMoneyCount: !!smartMoneyCount,
-    socialCount: !!socialCount
+    smartMoneyCount: !!smartMoneyCount
   });
 
   let lastSearchAddress = '';
@@ -779,8 +823,8 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
 
-    // 计算相对时间
-    const relativeTime = getRelativeTimeString(token.deploy_timestamp);
+    // 计算相对时间 - 修改为使用毫秒时间戳
+    const relativeTime = getRelativeTimeString(token.deploy_timestamp / 1000);
 
     // 构建HTML
     const html = `
@@ -811,7 +855,7 @@ document.addEventListener('DOMContentLoaded', function() {
           </div>
           ${token.twitter ? `
             <div class="stat-item">
-              <a href="https://twitter.com/${token.twitter}" target="_blank">
+              <a href="${token.twitter}" target="_blank">
                 📱 <span class="platform-text">官推</span>
               </a>
             </div>
@@ -1011,7 +1055,6 @@ document.addEventListener('DOMContentLoaded', function() {
       let response;
       
       if (isExtensionEnvironment) {
-        // 在扩展环境中使用chrome.runtime.sendMessage
         response = await new Promise((resolve, reject) => {
           const timeoutId = setTimeout(() => {
             reject(new Error('请求超时'));
@@ -1031,7 +1074,6 @@ document.addEventListener('DOMContentLoaded', function() {
           });
         });
       } else {
-        // 在本地调试模式下直接调用API
         response = await mockExtensionRequest('FETCH_PUMP_FUN', { address });
       }
 
@@ -1044,6 +1086,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
       if (Array.isArray(pumpFunData) && pumpFunData.length > 0) {
         const tokenData = pumpFunData[0];
+        console.log('Token数据:', tokenData);
         return {
           pumpfun: {
             mint: tokenData.mint,
@@ -1055,7 +1098,8 @@ document.addEventListener('DOMContentLoaded', function() {
             telegram: tokenData.telegram,
             website: tokenData.website,
             deploy_timestamp: tokenData.created_timestamp,
-            deployer: tokenData.creator
+            creator: tokenData.creator,
+            deployer: tokenData.deployer
           },
           analysis: {
             'lang-zh-CN': {
@@ -1124,14 +1168,152 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // 搜索代币信息
+  // 添加格式化市值的函数
+  function formatMarketCap(marketCap) {
+    if (marketCap >= 1000000) {
+      return (marketCap / 1000000).toFixed(1) + 'M';
+    } else if (marketCap >= 1000) {
+      return (marketCap / 1000).toFixed(1) + 'K';
+    }
+    return marketCap.toFixed(1);
+  }
+
+  // 添加获取Dev信息的函数
+  async function fetchDevInfo(creator) {
+    try {
+      const url = `https://frontend-api-v3.pump.fun/coins/user-created-coins/${creator}?offset=0&limit=10&includeNsfw=false`;
+      const response = await fetchWithRetry(url);
+      return response;
+    } catch (error) {
+      console.error('获取Dev信息失败:', error);
+      throw error;
+    }
+  }
+
+  // 添加显示Dev信息的函数
+  async function displayDevInfo(devData) {
+    try {
+      const devContainer = document.getElementById('devInfo');
+      if (!devContainer) return;
+
+      // 计算统计信息
+      const totalProjects = devData.length;
+      const successProjects = devData.filter(project => project.complete).length;
+      const maxMarketCap = Math.max(...devData.map(project => project.market_cap));
+
+      // 更新标题
+      const devTitle = document.getElementById('devTitle');
+      devTitle.textContent = `Dev(创业${totalProjects}次，成功${successProjects}次，最高市值${formatMarketCap(maxMarketCap)})`;
+
+      // 添加样式
+      const styleElement = document.createElement('style');
+      styleElement.textContent += `
+        .dev-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 10px;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .dev-table th,
+        .dev-table td {
+          padding: 12px;
+          text-align: left;
+          border-bottom: 1px solid #eee;
+          color: #000;
+        }
+
+        .dev-table th {
+          background: #f8f9fa;
+          font-weight: 600;
+          color: #000;
+          border-bottom: 2px solid #eee;
+        }
+
+        .dev-table tr.success {
+          background-color: rgba(34, 197, 94, 0.1);
+        }
+
+        .dev-table tr.high-value {
+          font-weight: 600;
+        }
+
+        .dev-table tr:last-child td {
+          border-bottom: none;
+        }
+      `;
+      document.head.appendChild(styleElement);
+
+      // 排序项目（按市值和时间倒序）
+      const sortedProjects = [...devData].sort((a, b) => {
+        if (b.market_cap !== a.market_cap) {
+          return b.market_cap - a.market_cap;
+        }
+        return b.created_timestamp - a.created_timestamp;
+      });
+
+      // 构建表格HTML
+      let html = `
+        <table class="dev-table">
+          <thead>
+            <tr>
+              <th>名称</th>
+              <th>市值</th>
+              <th>创建时间</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      for (const project of sortedProjects) {
+        const timeString = getRelativeTimeString(project.created_timestamp / 1000);
+        const isSuccess = project.complete;
+        const isHighValue = project.market_cap >= 1000000; // 超过1M
+
+        const rowClass = [
+          isSuccess ? 'success' : '',
+          isHighValue ? 'high-value' : ''
+        ].filter(Boolean).join(' ');
+
+        html += `
+          <tr class="${rowClass}">
+            <td>${project.name}</td>
+            <td>${formatMarketCap(project.market_cap)}</td>
+            <td>${timeString}</td>
+          </tr>
+        `;
+      }
+
+      html += `
+          </tbody>
+        </table>
+      `;
+
+      devContainer.innerHTML = html;
+    } catch (error) {
+      console.error('显示Dev信息失败:', error);
+      document.getElementById('devInfo').innerHTML = `
+        <div class="error-message">
+          <p>显示Dev信息失败: ${error.message}</p>
+        </div>
+      `;
+    }
+  }
+
+  // 修改 performSearch 函数，确保在获取 Dev 信息时正确处理数据
   async function performSearch(address) {
     try {
+      // 确保所有容器都已创建
+      createContainers();
+
       // 显示加载状态
       document.getElementById('loading').classList.remove('hidden');
       
       // 重置所有区域
       document.getElementById('tokenInfoContainer').innerHTML = '';
+      document.getElementById('devInfo').innerHTML = '';
       document.getElementById('smartMoneyInfo').innerHTML = '';
       document.getElementById('smartMoneyCount').textContent = '';
       
@@ -1149,6 +1331,43 @@ document.addEventListener('DOMContentLoaded', function() {
       if (pumpFunData) {
         console.log('显示代币基本信息:', pumpFunData);
         await displayTokenInfo(pumpFunData);
+
+        // 获取并显示Dev信息
+        const creator = pumpFunData.pumpfun.creator || pumpFunData.pumpfun.deployer;
+        console.log('Creator地址:', creator);
+
+        if (creator) {
+          // 更新Dev标题显示creator地址
+          const devTitle = document.getElementById('devTitle');
+          if (devTitle) {
+            devTitle.innerHTML = `Dev <span style="font-size: 12px; color: #666; font-weight: normal;">(${creator})</span>`;
+          }
+
+          try {
+            console.log('开始获取Dev信息，creator:', creator);
+            const devData = await fetchDevInfo(creator);
+            console.log('获取到的Dev数据:', devData);
+            
+            if (devData && Array.isArray(devData)) {
+              console.log('开始显示Dev信息');
+              await displayDevInfo(devData);
+            } else {
+              console.error('Dev数据格式不正确:', devData);
+              document.getElementById('devInfo').innerHTML = '<p class="no-data">暂无Dev数据</p>';
+            }
+          } catch (error) {
+            console.error('获取Dev信息失败:', error);
+            document.getElementById('devInfo').innerHTML = `
+              <div class="error-message">
+                <p>获取Dev信息失败: ${error.message}</p>
+              </div>
+            `;
+          }
+        } else {
+          console.warn('未找到creator信息');
+          document.getElementById('devTitle').innerHTML = 'Dev <span style="font-size: 12px; color: #666; font-weight: normal;">(未找到开发者地址)</span>';
+          document.getElementById('devInfo').innerHTML = '<p class="no-data">未找到Dev信息</p>';
+        }
       } else {
         console.warn('获取代币信息失败');
         document.getElementById('tokenInfoContainer').innerHTML = `
@@ -1158,7 +1377,7 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
       }
 
-      // 然后获取智能钱包数据
+      // 获取智能钱包数据
       const smartMoneyData = await fetchSmartMoneyData(address);
       
       // 隐藏智能钱包加载动画
@@ -1176,20 +1395,11 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
       }
 
-      // 调试信息
-      const debugInfo = document.getElementById('debugInfo');
-      debugInfo.textContent = JSON.stringify({
-        pumpFunData,
-        smartMoneyData
-      }, null, 2);
-
       // 隐藏加载状态
       document.getElementById('loading').classList.add('hidden');
 
     } catch (error) {
       console.error('搜索处理失败:', error);
-      
-      // 显示错误信息
       showError(`搜索失败: ${error.message}`);
       
       // 隐藏所有加载动画
