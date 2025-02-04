@@ -1174,7 +1174,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // 添加显示Dev信息的函数
+  // 添加地址缩写函数
+  function shortenAddress(address) {
+    if (!address || address.length < 8) return address;
+    return `${address.slice(0, 3)}...${address.slice(-3)}`;
+  }
+
+  // 修改 displayDevInfo 函数
   async function displayDevInfo(devData) {
     try {
       const devContainer = DOM_ELEMENTS.devInfo;
@@ -1184,10 +1190,47 @@ document.addEventListener('DOMContentLoaded', function() {
       const totalProjects = devData.length;
       const successProjects = devData.filter(project => project.complete).length;
       const maxMarketCap = Math.max(...devData.map(project => project.usd_market_cap || 0));
+      const creator = devData[0]?.creator;
 
       // 更新标题
       const devTitle = document.getElementById('devTitle');
-      devTitle.textContent = `Dev(创业${totalProjects}次，成功${successProjects}次，最高市值${formatMarketCap(maxMarketCap)})`;
+      if (creator) {
+        devTitle.innerHTML = `Dev(地址：<span class="creator-address" style="cursor: pointer; color: #666;" data-address="${creator}" title="点击复制地址">${shortenAddress(creator)}</span>，创业${totalProjects}次，成功${successProjects}次，最高市值${formatMarketCap(maxMarketCap)})`;
+      } else {
+        devTitle.textContent = `Dev(创业${totalProjects}次，成功${successProjects}次，最高市值${formatMarketCap(maxMarketCap)})`;
+      }
+
+      // 添加地址点击复制功能
+      const addressSpan = devTitle.querySelector('.creator-address');
+      if (addressSpan) {
+        addressSpan.addEventListener('click', async function() {
+          const address = this.dataset.address;
+          try {
+            await navigator.clipboard.writeText(address);
+            
+            // 添加视觉反馈
+            const originalColor = this.style.color;
+            const originalText = this.textContent;
+            this.style.color = '#22c55e';
+            this.textContent = '已复制';
+            
+            setTimeout(() => {
+              this.style.color = originalColor;
+              this.textContent = originalText;
+            }, 1000);
+          } catch (err) {
+            console.error('复制失败:', err);
+          }
+        });
+
+        // 添加悬停效果
+        addressSpan.addEventListener('mouseenter', function() {
+          this.style.textDecoration = 'underline';
+        });
+        addressSpan.addEventListener('mouseleave', function() {
+          this.style.textDecoration = 'none';
+        });
+      }
 
       // 添加样式
       const styleElement = document.createElement('style');
@@ -1227,6 +1270,14 @@ document.addEventListener('DOMContentLoaded', function() {
         .dev-table tr:last-child td {
           border-bottom: none;
         }
+
+        .success-status {
+          color: #22c55e;
+        }
+
+        .fail-status {
+          color: #ef4444;
+        }
       `;
       document.head.appendChild(styleElement);
 
@@ -1246,6 +1297,7 @@ document.addEventListener('DOMContentLoaded', function() {
               <th>名称</th>
               <th>市值</th>
               <th>创建时间</th>
+              <th>成功</th>
             </tr>
           </thead>
           <tbody>
@@ -1266,6 +1318,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <td>${project.name}</td>
             <td>${formatMarketCap(project.usd_market_cap || 0)}</td>
             <td>${timeString}</td>
+            <td><span class="${isSuccess ? 'success-status' : 'fail-status'}">${isSuccess ? '是' : '否'}</span></td>
           </tr>
         `;
       }
