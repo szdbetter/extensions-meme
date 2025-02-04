@@ -743,21 +743,28 @@ document.addEventListener('DOMContentLoaded', function() {
     return num.toFixed(1);
   }
 
-  // 计算相对时间
-  function getRelativeTime(timestamp) {
-    if (!timestamp) return '';
-    
+  // 添加相对时间计算函数
+  function getRelativeTimeString(timestamp) {
     const now = new Date();
-    const past = new Date(timestamp);
-    const timeDiff = now - past;
-    
-    const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
-    
-    if (days > 0) return `${days}天前`;
-    if (hours > 0) return `${hours}小时前`;
-    return `${minutes}分钟前`;
+    const past = new Date(timestamp * 1000);
+    const diffInSeconds = Math.floor((now - past) / 1000);
+
+    if (diffInSeconds < 60) {
+      return '刚刚';
+    }
+
+    const diffInMinutes = Math.floor(diffInSeconds / 60);
+    if (diffInMinutes < 60) {
+      return `${diffInMinutes}分钟前`;
+    }
+
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) {
+      return `${diffInHours}小时前`;
+    }
+
+    const diffInDays = Math.floor(diffInHours / 24);
+    return `${diffInDays}天前`;
   }
 
   // 显示代币信息
@@ -773,7 +780,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // 计算相对时间
-    const relativeTime = getRelativeTime(token.deploy_timestamp);
+    const relativeTime = getRelativeTimeString(token.deploy_timestamp);
 
     // 构建HTML
     const html = `
@@ -1333,16 +1340,14 @@ document.addEventListener('DOMContentLoaded', function() {
           border-radius: 8px;
           overflow: hidden;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-          font-size: 14px;
         }
 
         .transactions-table th,
         .transactions-table td {
-          padding: 14px;
+          padding: 12px;
           text-align: left;
           border-bottom: 1px solid #eee;
           color: #000;
-          font-size: 1.1em;
         }
 
         .transactions-table th {
@@ -1366,10 +1371,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         .tx-type-cell {
           display: inline-block;
-          padding: 4px 12px;
+          padding: 4px 8px;
           border-radius: 4px;
-          font-size: 1em;
-          font-weight: 600;
+          font-weight: 500;
         }
 
         .tx-type-cell.buy {
@@ -1441,8 +1445,7 @@ document.addEventListener('DOMContentLoaded', function() {
       for (const tx of transactions) {
         if (!tx || !tx.block_time || !tx.events || !tx.events[0]) continue;
 
-        const timestamp = new Date(tx.block_time * 1000);
-        const timeString = `${timestamp.getMonth() + 1}/${timestamp.getDate()} ${timestamp.getHours().toString().padStart(2, '0')}:${timestamp.getMinutes().toString().padStart(2, '0')}`;
+        const timeString = getRelativeTimeString(tx.block_time);
         
         const event = tx.events[0];
         if (!event || !event.data) continue;
