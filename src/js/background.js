@@ -213,7 +213,7 @@ async function fetchSmartMoneyData(contractAddress) {
   try {
     console.log('尝试获取智能钱包数据，地址:', contractAddress);
     
-    // 首先尝试直接获取
+    // 构造请求参数
     const params = {
       "0": {
         "json": {
@@ -236,53 +236,32 @@ async function fetchSmartMoneyData(contractAddress) {
       }
     };
 
-    const response = await fetch('https://chain.fm/api/trpc/parsedTransaction.list?batch=1', {
+    // 尝试通过本地服务器获取数据
+    const localResponse = await fetch('http://localhost:3000', {
       method: 'POST',
       headers: {
-        'accept': '*/*',
-        'content-type': 'application/json',
-        'Referer': 'https://chain.fm/',
-        'Origin': 'https://chain.fm'
+        'Content-Type': 'application/json'
       },
-      body: JSON.stringify(params)
+      body: JSON.stringify({
+        url: 'https://chain.fm/api/trpc/parsedTransaction.list?batch=1',
+        dataType: 'smartMoney',
+        params: params
+      })
     });
 
-    if (!response.ok) {
-      console.log('直连获取失败，尝试通过本地服务器获取');
-      // 通过本地服务器获取数据
-      const localResponse = await fetch('http://localhost:3000', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          url: 'https://chain.fm/api/trpc/parsedTransaction.list?batch=1',
-          dataType: 'smartMoney',
-          params: params
-        })
-      });
-
-      if (!localResponse.ok) {
-        throw new Error(`本地服务器请求失败: ${localResponse.status}`);
-      }
-
-      const localData = await localResponse.json();
-      if (!localData.success) {
-        throw new Error(localData.error || '本地服务器返回错误');
-      }
-
-      return {
-        success: true,
-        data: localData.response.data,
-        source: 'local_server'
-      };
+    if (!localResponse.ok) {
+      throw new Error(`本地服务器请求失败: ${localResponse.status}`);
     }
 
-    const data = await response.json();
+    const localData = await localResponse.json();
+    if (!localData.success) {
+      throw new Error(localData.error || '本地服务器返回错误');
+    }
+
     return {
       success: true,
-      data: data,
-      source: 'direct'
+      data: localData.response.data,
+      source: 'local_server'
     };
 
   } catch (error) {
