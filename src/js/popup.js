@@ -1389,19 +1389,91 @@ document.addEventListener('DOMContentLoaded', function() {
       // 构建项目历史表格 HTML
       let projectsTableHtml = `
         <div class="dev-projects">
-          <div class="data-source-note">数据来源: PumpFun</div>
-          <h3 class="dev-section-title">发币历史</h3>
           <table class="dev-table">
             <thead>
               <tr>
-                <th>名称</th>
+                <th>历史创业</th>
                 <th>市值</th>
                 <th>创建时间</th>
-                <th>成功</th>
+                <th>状态</th>
               </tr>
             </thead>
             <tbody>
       `;
+
+      // 添加表格样式
+      const styleElement = document.createElement('style');
+      styleElement.textContent = `
+        .dev-table {
+          width: 100%;
+          border-collapse: separate;
+          border-spacing: 0;
+          background: #fff;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .dev-table thead {
+          background: #f8f9fa;
+        }
+
+        .dev-table th {
+          padding: 12px 16px;
+          text-align: left;
+          font-weight: 600;
+          font-size: 14px;
+          color: #333;
+          border-bottom: 1px solid #eee;
+        }
+
+        .dev-table td {
+          padding: 12px 16px;
+          font-size: 14px;
+          border-bottom: 1px solid #eee;
+        }
+
+        .dev-table tr:last-child td {
+          border-bottom: none;
+        }
+
+        .dev-table tbody tr {
+          transition: background-color 0.2s;
+        }
+
+        .dev-table tbody tr:hover {
+          background-color: #f8f9fa;
+        }
+
+        .dev-table tbody tr.success {
+          background-color: rgba(34, 197, 94, 0.1);
+        }
+
+        .dev-table tbody tr.success:hover {
+          background-color: rgba(34, 197, 94, 0.15);
+        }
+
+        .success-status {
+          display: inline-block;
+          padding: 4px 12px;
+          background: #22c55e;
+          color: white;
+          border-radius: 12px;
+          font-size: 12px;
+          font-weight: 500;
+        }
+
+        .fail-status {
+          display: inline-block;
+          padding: 4px 12px;
+          background: #ef4444;
+          color: white;
+          border-radius: 12px;
+          font-size: 12px;
+          font-weight: 500;
+        }
+      `;
+      document.head.appendChild(styleElement);
 
       // 排序项目（按市值和时间倒序）
       const sortedProjects = [...devData].sort((a, b) => {
@@ -1426,7 +1498,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <td>${project.name}</td>
             <td>${formatMarketCap(project.usd_market_cap || 0)}</td>
             <td>${timeString}</td>
-            <td><span class="${isSuccess ? 'success-status' : 'fail-status'}">${isSuccess ? '是' : '否'}</span></td>
+            <td><span class="${isSuccess ? 'success-status' : 'fail-status'}">${isSuccess ? '成功' : '失败'}</span></td>
           </tr>
         `;
       }
