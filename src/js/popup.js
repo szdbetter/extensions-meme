@@ -1374,27 +1374,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const devContainer = DOM_ELEMENTS.devInfo;
       if (!devContainer) return;
 
-      // 获取 Dev 交易信息，使用代理
-      const devTransUrl = `https://debot.ai/api/dashboard/token/dev/info?chain=solana&token=${lastSearchAddress}`;
-      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(devTransUrl)}`;
-      
-      console.log('开始获取Dev交易信息:', proxyUrl);
-      const devTransResponse = await fetch(proxyUrl, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!devTransResponse.ok) {
-        throw new Error(`HTTP error! status: ${devTransResponse.status}`);
-      }
-
-      const devTransData = await devTransResponse.json();
-      console.log('获取到的Dev交易数据:', devTransData);
-
-      // 计算统计信息
+      // 显示PumpFun数据
       const totalProjects = devData.length;
       const successProjects = devData.filter(project => project.complete).length;
       const maxMarketCap = Math.max(...devData.map(project => project.usd_market_cap || 0));
@@ -1406,132 +1386,10 @@ document.addEventListener('DOMContentLoaded', function() {
         devTitle.innerHTML = `Dev(地址：<span class="creator-address" style="cursor: pointer; color: #666;" data-address="${creator}" title="点击复制地址">${shortenAddress(creator)}</span>，创业${totalProjects}次，成功${successProjects}次，最高市值${formatMarketCap(maxMarketCap)})`;
       }
 
-      // 构建交易记录表格 HTML
-      let transTableHtml = '';
-      if (devTransData.code === 0 && devTransData.data) {
-        const transactions = devTransData.data.transactions;
-        transTableHtml = `
-          <div class="dev-transactions">
-            <h3 class="dev-section-title">交易记录</h3>
-            <div class="dev-trans-stats">
-              <div class="stat-item">
-                <span class="stat-label">买入总量:</span>
-                <span class="stat-value buy">${formatNumber(devTransData.data.buy_amount)}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">卖出总量:</span>
-                <span class="stat-value sell">${formatNumber(devTransData.data.sell_amount)}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">转入总量:</span>
-                <span class="stat-value">${formatNumber(devTransData.data.trans_in_amount)}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">转出总量:</span>
-                <span class="stat-value">${formatNumber(devTransData.data.trans_out_amount)}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">当前持仓:</span>
-                <span class="stat-value ${devTransData.data.position > 0 ? 'buy' : 'sell'}">${formatNumber(devTransData.data.position)}</span>
-              </div>
-            </div>
-            <table class="dev-trans-table">
-              <thead>
-                <tr>
-                  <th>时间</th>
-                  <th>操作</th>
-                  <th>数量</th>
-                  <th>转出地址</th>
-                  <th>转入地址</th>
-                </tr>
-              </thead>
-              <tbody>
-        `;
-
-        for (const tx of transactions) {
-          const time = getRelativeTimeString(tx.time);
-          const operation = tx.op === 'buy' ? '买入' : 
-                           tx.op === 'sell' ? '卖出' :
-                           tx.op === 'trans_in' ? '转入' : '转出';
-          const opClass = tx.op === 'buy' ? 'buy' :
-                         tx.op === 'sell' ? 'sell' :
-                         tx.op === 'trans_in' ? 'trans-in' : 'trans-out';
-          
-          transTableHtml += `
-            <tr>
-              <td>${time}</td>
-              <td><span class="op-badge ${opClass}">${operation}</span></td>
-              <td>${formatNumber(tx.amount)}</td>
-              <td>
-                <a href="https://gmgn.ai/sol/address/${tx.from}" 
-                   class="address-link" 
-                   title="${tx.from}"
-                   target="_blank">${shortenAddress(tx.from)}</a>
-              </td>
-              <td>
-                <a href="https://gmgn.ai/sol/address/${tx.to}" 
-                   class="address-link" 
-                   title="${tx.to}"
-                   target="_blank">${shortenAddress(tx.to)}</a>
-              </td>
-            </tr>
-          `;
-        }
-
-        transTableHtml += `
-              </tbody>
-            </table>
-          </div>
-        `;
-
-        // 添加新的样式
-        const styleElement = document.createElement('style');
-        styleElement.textContent = `
-          .dev-trans-stats {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-bottom: 15px;
-            padding: 10px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-          }
-
-          .dev-trans-stats .stat-item {
-            flex: 1;
-            min-width: 150px;
-            padding: 8px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 6px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-          }
-
-          .stat-label {
-            color: rgba(255, 255, 255, 0.7);
-            font-size: 13px;
-          }
-
-          .stat-value {
-            font-weight: 500;
-            color: #fff;
-          }
-
-          .stat-value.buy {
-            color: #22c55e;
-          }
-
-          .stat-value.sell {
-            color: #ef4444;
-          }
-        `;
-        document.head.appendChild(styleElement);
-      }
-
       // 构建项目历史表格 HTML
       let projectsTableHtml = `
         <div class="dev-projects">
+          <div class="data-source-note">数据来源: PumpFun</div>
           <h3 class="dev-section-title">发币历史</h3>
           <table class="dev-table">
             <thead>
@@ -1579,8 +1437,122 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
       `;
 
+      // 尝试获取Debot数据
+      let debotHtml = '';
+      try {
+        const devTransUrl = `https://debot.ai/api/dashboard/token/dev/info?chain=solana&token=${devData[0]?.token_address || ''}`;
+        console.log('开始获取Dev交易信息:', devTransUrl);
+        
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(devTransUrl)}`;
+        const devTransResponse = await fetch(proxyUrl);
+
+        if (!devTransResponse.ok) {
+          throw new Error(`HTTP error! status: ${devTransResponse.status}`);
+        }
+
+        const devTransData = await devTransResponse.json();
+        console.log('获取到的Dev交易数据:', devTransData);
+
+        if (devTransData.code === 0 && devTransData.data) {
+          const transactions = devTransData.data.transactions;
+          debotHtml = `
+            <div class="dev-transactions">
+              <div class="data-source-note">数据来源: Debot</div>
+              <h3 class="dev-section-title">交易记录</h3>
+              <div class="dev-trans-stats">
+                <div class="stat-item">
+                  <span class="stat-label">买入总量:</span>
+                  <span class="stat-value buy">${formatNumber(devTransData.data.buy_amount)}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">卖出总量:</span>
+                  <span class="stat-value sell">${formatNumber(devTransData.data.sell_amount)}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">转入总量:</span>
+                  <span class="stat-value">${formatNumber(devTransData.data.trans_in_amount)}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">转出总量:</span>
+                  <span class="stat-value">${formatNumber(devTransData.data.trans_out_amount)}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">当前持仓:</span>
+                  <span class="stat-value ${devTransData.data.position > 0 ? 'buy' : 'sell'}">${formatNumber(devTransData.data.position)}</span>
+                </div>
+              </div>
+              <table class="dev-trans-table">
+                <thead>
+                  <tr>
+                    <th>时间</th>
+                    <th>操作</th>
+                    <th>数量</th>
+                    <th>转出地址</th>
+                    <th>转入地址</th>
+                  </tr>
+                </thead>
+                <tbody>
+          `;
+
+          for (const tx of transactions) {
+            const time = getRelativeTimeString(tx.time);
+            const operation = tx.op === 'buy' ? '买入' : 
+                           tx.op === 'sell' ? '卖出' :
+                           tx.op === 'trans_in' ? '转入' : '转出';
+            const opClass = tx.op === 'buy' ? 'buy' :
+                         tx.op === 'sell' ? 'sell' :
+                         tx.op === 'trans_in' ? 'trans-in' : 'trans-out';
+            
+            debotHtml += `
+              <tr>
+                <td>${time}</td>
+                <td><span class="op-badge ${opClass}">${operation}</span></td>
+                <td>${formatNumber(tx.amount)}</td>
+                <td>
+                  <a href="https://gmgn.ai/sol/address/${tx.from}" 
+                     class="address-link" 
+                     title="${tx.from}"
+                     target="_blank">${shortenAddress(tx.from)}</a>
+                </td>
+                <td>
+                  <a href="https://gmgn.ai/sol/address/${tx.to}" 
+                     class="address-link" 
+                     title="${tx.to}"
+                     target="_blank">${shortenAddress(tx.to)}</a>
+                </td>
+              </tr>
+            `;
+          }
+
+          debotHtml += `
+                </tbody>
+              </table>
+            </div>
+          `;
+        } else {
+          debotHtml = `
+            <div class="dev-transactions">
+              <div class="data-source-note">数据来源: Debot</div>
+              <div class="error-message">
+                <p>Debot数据获取失败: 返回数据格式错误</p>
+              </div>
+            </div>
+          `;
+        }
+      } catch (error) {
+        console.error('获取Debot数据失败:', error);
+        debotHtml = `
+          <div class="dev-transactions">
+            <div class="data-source-note">数据来源: Debot</div>
+            <div class="error-message">
+              <p>Debot数据获取失败: ${error.message}</p>
+            </div>
+          </div>
+        `;
+      }
+
       // 组合所有内容
-      devContainer.innerHTML = transTableHtml + projectsTableHtml;
+      devContainer.innerHTML = projectsTableHtml + debotHtml;
 
       // 添加地址点击复制功能
       const addressSpan = devTitle.querySelector('.creator-address');
