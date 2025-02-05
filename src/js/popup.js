@@ -1374,6 +1374,26 @@ document.addEventListener('DOMContentLoaded', function() {
       const devContainer = DOM_ELEMENTS.devInfo;
       if (!devContainer) return;
 
+      // 获取 Dev 交易信息，使用代理
+      const devTransUrl = `https://debot.ai/api/dashboard/token/dev/info?chain=solana&token=${lastSearchAddress}`;
+      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(devTransUrl)}`;
+      
+      console.log('开始获取Dev交易信息:', proxyUrl);
+      const devTransResponse = await fetch(proxyUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!devTransResponse.ok) {
+        throw new Error(`HTTP error! status: ${devTransResponse.status}`);
+      }
+
+      const devTransData = await devTransResponse.json();
+      console.log('获取到的Dev交易数据:', devTransData);
+
       // 计算统计信息
       const totalProjects = devData.length;
       const successProjects = devData.filter(project => project.complete).length;
@@ -1384,90 +1404,146 @@ document.addEventListener('DOMContentLoaded', function() {
       const devTitle = document.getElementById('devTitle');
       if (creator) {
         devTitle.innerHTML = `Dev(地址：<span class="creator-address" style="cursor: pointer; color: #666;" data-address="${creator}" title="点击复制地址">${shortenAddress(creator)}</span>，创业${totalProjects}次，成功${successProjects}次，最高市值${formatMarketCap(maxMarketCap)})`;
-      } else {
-        devTitle.textContent = `Dev(创业${totalProjects}次，成功${successProjects}次，最高市值${formatMarketCap(maxMarketCap)})`;
       }
 
-      // 添加地址点击复制功能
-      const addressSpan = devTitle.querySelector('.creator-address');
-      if (addressSpan) {
-        addressSpan.addEventListener('click', async function() {
-          const address = this.dataset.address;
-          try {
-            await navigator.clipboard.writeText(address);
-            
-            // 添加视觉反馈
-            const originalColor = this.style.color;
-            const originalText = this.textContent;
-            this.style.color = '#22c55e';
-            this.textContent = '已复制';
-            
-            setTimeout(() => {
-              this.style.color = originalColor;
-              this.textContent = originalText;
-            }, 1000);
-          } catch (err) {
-            console.error('复制失败:', err);
+      // 构建交易记录表格 HTML
+      let transTableHtml = '';
+      if (devTransData.code === 0 && devTransData.data) {
+        const transactions = devTransData.data.transactions;
+        transTableHtml = `
+          <div class="dev-transactions">
+            <h3 class="dev-section-title">交易记录</h3>
+            <div class="dev-trans-stats">
+              <div class="stat-item">
+                <span class="stat-label">买入总量:</span>
+                <span class="stat-value buy">${formatNumber(devTransData.data.buy_amount)}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">卖出总量:</span>
+                <span class="stat-value sell">${formatNumber(devTransData.data.sell_amount)}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">转入总量:</span>
+                <span class="stat-value">${formatNumber(devTransData.data.trans_in_amount)}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">转出总量:</span>
+                <span class="stat-value">${formatNumber(devTransData.data.trans_out_amount)}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">当前持仓:</span>
+                <span class="stat-value ${devTransData.data.position > 0 ? 'buy' : 'sell'}">${formatNumber(devTransData.data.position)}</span>
+              </div>
+            </div>
+            <table class="dev-trans-table">
+              <thead>
+                <tr>
+                  <th>时间</th>
+                  <th>操作</th>
+                  <th>数量</th>
+                  <th>转出地址</th>
+                  <th>转入地址</th>
+                </tr>
+              </thead>
+              <tbody>
+        `;
+
+        for (const tx of transactions) {
+          const time = getRelativeTimeString(tx.time);
+          const operation = tx.op === 'buy' ? '买入' : 
+                           tx.op === 'sell' ? '卖出' :
+                           tx.op === 'trans_in' ? '转入' : '转出';
+          const opClass = tx.op === 'buy' ? 'buy' :
+                         tx.op === 'sell' ? 'sell' :
+                         tx.op === 'trans_in' ? 'trans-in' : 'trans-out';
+          
+          transTableHtml += `
+            <tr>
+              <td>${time}</td>
+              <td><span class="op-badge ${opClass}">${operation}</span></td>
+              <td>${formatNumber(tx.amount)}</td>
+              <td>
+                <a href="https://gmgn.ai/sol/address/${tx.from}" 
+                   class="address-link" 
+                   title="${tx.from}"
+                   target="_blank">${shortenAddress(tx.from)}</a>
+              </td>
+              <td>
+                <a href="https://gmgn.ai/sol/address/${tx.to}" 
+                   class="address-link" 
+                   title="${tx.to}"
+                   target="_blank">${shortenAddress(tx.to)}</a>
+              </td>
+            </tr>
+          `;
+        }
+
+        transTableHtml += `
+              </tbody>
+            </table>
+          </div>
+        `;
+
+        // 添加新的样式
+        const styleElement = document.createElement('style');
+        styleElement.textContent = `
+          .dev-trans-stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
           }
-        });
 
-        // 添加悬停效果
-        addressSpan.addEventListener('mouseenter', function() {
-          this.style.textDecoration = 'underline';
-        });
-        addressSpan.addEventListener('mouseleave', function() {
-          this.style.textDecoration = 'none';
-        });
+          .dev-trans-stats .stat-item {
+            flex: 1;
+            min-width: 150px;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          }
+
+          .stat-label {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 13px;
+          }
+
+          .stat-value {
+            font-weight: 500;
+            color: #fff;
+          }
+
+          .stat-value.buy {
+            color: #22c55e;
+          }
+
+          .stat-value.sell {
+            color: #ef4444;
+          }
+        `;
+        document.head.appendChild(styleElement);
       }
 
-      // 添加样式
-      const styleElement = document.createElement('style');
-      styleElement.textContent += `
-        .dev-table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-top: 10px;
-          border-radius: 8px;
-          overflow: hidden;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        }
-
-        .dev-table th,
-        .dev-table td {
-          padding: 12px;
-          text-align: left;
-          border-bottom: 1px solid #eee;
-          color: #000;
-        }
-
-        .dev-table th {
-          background: #f8f9fa;
-          font-weight: 600;
-          color: #000;
-          border-bottom: 2px solid #eee;
-        }
-
-        .dev-table tr.success {
-          background-color: rgba(34, 197, 94, 0.1);
-        }
-
-        .dev-table tr.high-value {
-          font-weight: 600;
-        }
-
-        .dev-table tr:last-child td {
-          border-bottom: none;
-        }
-
-        .success-status {
-          color: #22c55e;
-        }
-
-        .fail-status {
-          color: #ef4444;
-        }
+      // 构建项目历史表格 HTML
+      let projectsTableHtml = `
+        <div class="dev-projects">
+          <h3 class="dev-section-title">发币历史</h3>
+          <table class="dev-table">
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th>市值</th>
+                <th>创建时间</th>
+                <th>成功</th>
+              </tr>
+            </thead>
+            <tbody>
       `;
-      document.head.appendChild(styleElement);
 
       // 排序项目（按市值和时间倒序）
       const sortedProjects = [...devData].sort((a, b) => {
@@ -1477,31 +1553,17 @@ document.addEventListener('DOMContentLoaded', function() {
         return b.created_timestamp - a.created_timestamp;
       });
 
-      // 构建表格HTML
-      let html = `
-        <table class="dev-table">
-          <thead>
-            <tr>
-              <th>名称</th>
-              <th>市值</th>
-              <th>创建时间</th>
-              <th>成功</th>
-            </tr>
-          </thead>
-          <tbody>
-      `;
-
       for (const project of sortedProjects) {
         const timeString = getRelativeTimeString(project.created_timestamp / 1000);
         const isSuccess = project.complete;
-        const isHighValue = (project.usd_market_cap || 0) >= 1000000; // 超过1M
+        const isHighValue = (project.usd_market_cap || 0) >= 1000000;
 
         const rowClass = [
           isSuccess ? 'success' : '',
           isHighValue ? 'high-value' : ''
         ].filter(Boolean).join(' ');
 
-        html += `
+        projectsTableHtml += `
           <tr class="${rowClass}">
             <td>${project.name}</td>
             <td>${formatMarketCap(project.usd_market_cap || 0)}</td>
@@ -1511,12 +1573,43 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
       }
 
-      html += `
-          </tbody>
-        </table>
+      projectsTableHtml += `
+            </tbody>
+          </table>
+        </div>
       `;
 
-      devContainer.innerHTML = html;
+      // 组合所有内容
+      devContainer.innerHTML = transTableHtml + projectsTableHtml;
+
+      // 添加地址点击复制功能
+      const addressSpan = devTitle.querySelector('.creator-address');
+      if (addressSpan) {
+        addressSpan.addEventListener('click', async function() {
+          const address = this.dataset.address;
+          try {
+            await navigator.clipboard.writeText(address);
+            const originalColor = this.style.color;
+            const originalText = this.textContent;
+            this.style.color = '#22c55e';
+            this.textContent = '已复制';
+            setTimeout(() => {
+              this.style.color = originalColor;
+              this.textContent = originalText;
+            }, 1000);
+          } catch (err) {
+            console.error('复制失败:', err);
+          }
+        });
+
+        addressSpan.addEventListener('mouseenter', function() {
+          this.style.textDecoration = 'underline';
+        });
+        addressSpan.addEventListener('mouseleave', function() {
+          this.style.textDecoration = 'none';
+        });
+      }
+
     } catch (error) {
       console.error('显示Dev信息失败:', error);
       DOM_ELEMENTS.devInfo.innerHTML = `
