@@ -121,24 +121,76 @@ async function fetchDevInfo(address) {
   }
 }
 
-// 从GMGN获取数据
-async function fetchGMGNData(url, params, headers) {
+// 修改 GMGN 数据获取函数
+async function fetchGMGNData(url) {
+  const proxyServers = [
+    'https://corsproxy.io/?',
+    'https://api.allorigins.win/raw?url=',
+    'https://api.codetabs.com/v1/proxy?quest='
+  ];
+
+  // 从 URL 中提取代币地址
+  const address = url.split('/sol/')[1].split('?')[0];
+  
+  const targetUrl = `https://gmgn.ai/api/token/sol/${address}`;
+  const headers = {
+    'accept': 'application/json',
+    'accept-language': 'zh-CN,zh;q=0.9',
+    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+    'origin': 'https://gmgn.ai',
+    'referer': 'https://gmgn.ai/',
+    'x-requested-with': 'XMLHttpRequest'
+  };
+
+  // 尝试每个代理服务器
+  for (let i = 0; i < proxyServers.length; i++) {
+    try {
+      console.log(`尝试通过代理 ${i + 1}/${proxyServers.length} 获取数据`);
+      const proxyUrl = `${proxyServers[i]}${encodeURIComponent(targetUrl)}`;
+      console.log('代理请求 URL:', proxyUrl);
+
+      const response = await fetch(proxyUrl, {
+        method: 'GET',
+        headers: headers
+      });
+
+      if (!response.ok) {
+        console.warn(`代理 ${i + 1} 请求失败:`, response.status);
+        continue;
+      }
+
+      const data = await response.json();
+      console.log(`通过代理 ${i + 1} 获取数据成功:`, data);
+      return data;
+    } catch (error) {
+      console.error(`代理 ${i + 1} 请求失败:`, error);
+      continue;
+    }
+  }
+
+  // 如果所有代理都失败，尝试直接请求
   try {
-    const fullUrl = `${url}?${params}`;
-    const response = await fetch(fullUrl, {
+    console.log('尝试直接请求');
+    const response = await fetch(targetUrl, {
       method: 'GET',
-      headers: headers
+      headers: {
+        ...headers,
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      },
+      credentials: 'omit'
     });
 
     if (!response.ok) {
-      throw new Error(`请求失败: ${response.status}`);
+      throw new Error(`直接请求失败: ${response.status}`);
     }
 
     const data = await response.json();
+    console.log('直接请求成功:', data);
     return data;
   } catch (error) {
-    console.error('从GMGN获取数据失败:', error);
-    throw error;
+    console.error('所有请求尝试都失败了:', error);
+    throw new Error('无法获取 GMGN 数据');
   }
 }
 
@@ -350,6 +402,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           const chainFMData = await fetchChainFMData(request.url, request.params);
           console.log('chain.fm数据:', chainFMData);
           return { success: true, data: chainFMData };
+
+        case 'FETCH_GMGN_DATA':
+          try {
+            console.log('开始获取GMGN数据:', request.url);
+            const gmgnData = await fetchGMGNData(request.url);
+            console.log('GMGN数据获取成功:', gmgnData);
+            return { success: true, data: gmgnData };
+          } catch (error) {
+            console.error('GMGN数据获取失败:', error);
+            return { 
+              success: false, 
+              error: error.message,
+              errorType: error.constructor.name
+            };
+          }
 
         default:
           console.warn('未知的消息类型:', request.type);

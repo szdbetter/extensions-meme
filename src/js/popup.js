@@ -16,6 +16,15 @@ document.addEventListener('DOMContentLoaded', function() {
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
       }
 
+      .data-source-note {
+        margin-bottom: 20px;
+        padding: 16px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        color: #666;
+        font-size: 14px;
+      }
+
       .section-header {
         padding: 16px;
         border-bottom: 1px solid #eee;
@@ -56,6 +65,12 @@ document.addEventListener('DOMContentLoaded', function() {
       resultsContainer.className = 'results-container';
       document.body.appendChild(resultsContainer);
     }
+
+    // 添加数据来源提示
+    const dataSourceNote = document.createElement('div');
+    dataSourceNote.className = 'data-source-note';
+    dataSourceNote.textContent = 'GMGN数据，接下来尝试获取GMGN API的数据';
+    resultsContainer.appendChild(dataSourceNote);
 
     // 创建代币信息区域（如果不存在）
     const tokenSection = document.querySelector('.token-info-section') || (() => {
@@ -1339,7 +1354,108 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // 修改 performSearch 函数，确保在获取 Dev 信息时正确处理数据
+  // 修改 fetchGMGNData 函数
+  async function fetchGMGNData(address) {
+    try {
+      const url = `https://gmgn.ai/api/v1/token_stat/sol/${address}?device_id=520cc162-92cd-4ee6-9add-25e40e359805&client_id=gmgn_web_2025.0128.214338&from_app=gmgn&app_ver=2025.0128.214338&tz_name=Asia%2FShanghai&tz_offset=28800&app_lang=en`;
+      
+      // 如果在扩展环境中，通过 background 脚本发送请求
+      if (isExtensionEnvironment) {
+        const response = await new Promise((resolve, reject) => {
+          const timeoutId = setTimeout(() => {
+            reject(new Error('请求超时'));
+          }, 30000);
+
+          chrome.runtime.sendMessage({
+            type: 'FETCH_GMGN_DATA',
+            url: url
+          }, (response) => {
+            clearTimeout(timeoutId);
+            if (chrome.runtime.lastError) {
+              console.error('消息发送错误:', chrome.runtime.lastError);
+              reject(new Error(chrome.runtime.lastError.message));
+            } else {
+              resolve(response);
+            }
+          });
+        });
+
+        if (!response.success) {
+          throw new Error(response.error || '请求失败');
+        }
+
+        return response.data;
+      } else {
+        // 在本地环境中直接发送请求
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'authority': 'gmgn.ai',
+            'accept': 'application/json, text/plain, */*',
+            'accept-language': 'zh-CN,zh;q=0.9',
+            'cache-control': 'no-cache',
+            'origin': 'https://gmgn.ai',
+            'pragma': 'no-cache',
+            'referer': 'https://gmgn.ai/',
+            'sec-ch-ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"macOS"',
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors',
+            'sec-fetch-site': 'same-origin',
+            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+          },
+          credentials: 'include'
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+      }
+    } catch (error) {
+      console.error('获取GMGN数据失败:', error);
+      throw error;
+    }
+  }
+
+  // 添加 GMGN 数据显示函数
+  function displayGMGNData(data) {
+    // 创建或获取 GMGN 数据容器
+    let gmgnDataContainer = document.querySelector('.gmgn-data-section');
+    if (!gmgnDataContainer) {
+      gmgnDataContainer = document.createElement('div');
+      gmgnDataContainer.className = 'section gmgn-data-section';
+      
+      const gmgnTitle = document.createElement('div');
+      gmgnTitle.className = 'section-header';
+      gmgnTitle.innerHTML = '<h2>GMGN API 数据</h2>';
+      
+      const gmgnContent = document.createElement('div');
+      gmgnContent.className = 'info-box';
+      gmgnContent.style.whiteSpace = 'pre-wrap';
+      gmgnContent.style.fontFamily = 'monospace';
+      gmgnContent.style.fontSize = '12px';
+      gmgnContent.style.overflowX = 'auto';
+      
+      gmgnDataContainer.appendChild(gmgnTitle);
+      gmgnDataContainer.appendChild(gmgnContent);
+      
+      // 添加到页面底部
+      document.querySelector('.results-container').appendChild(gmgnDataContainer);
+    }
+
+    // 显示数据
+    const gmgnContent = gmgnDataContainer.querySelector('.info-box');
+    try {
+      gmgnContent.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+    } catch (error) {
+      gmgnContent.innerHTML = `<pre>数据格式化失败: ${error.message}\n\n原始数据: ${JSON.stringify(data)}</pre>`;
+    }
+  }
+
+  // 修改 performSearch 函数，添加 GMGN 数据获取和显示
   async function performSearch(address) {
     try {
       // 确保所有容器都已创建
@@ -1430,6 +1546,21 @@ document.addEventListener('DOMContentLoaded', function() {
             <p>获取聪明钱数据失败: ${smartMoneyData?.error || '未知错误'}</p>
           </div>
         `;
+      }
+
+      // 获取 GMGN 数据
+      try {
+        console.log('开始获取GMGN数据');
+        const gmgnData = await fetchGMGNData(address);
+        console.log('GMGN数据:', gmgnData);
+        displayGMGNData(gmgnData);
+      } catch (error) {
+        console.error('GMGN数据获取失败:', error);
+        displayGMGNData({
+          error: true,
+          message: error.message,
+          stack: error.stack
+        });
       }
 
       // 隐藏加载状态
