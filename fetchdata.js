@@ -123,13 +123,34 @@ async function fetchData(url, dataType = '', params = null) {
         const page = await browser.newPage();
         
         // 设置通用请求头
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-        await page.setExtraHTTPHeaders({
+        await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
+        
+        // 根据不同的域名设置不同的请求头
+        const urlObj = new URL(url);
+        let headers = {
             'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'Origin': 'https://chain.fm',
-            'Referer': 'https://chain.fm/'
-        });
+            'Content-Type': 'application/json'
+        };
+        
+        if (urlObj.hostname === 'debot.ai') {
+            headers = {
+                'Accept': '*/*',
+                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                'Content-Type': 'application/json',
+                'Origin': 'https://debot.ai',
+                'Referer': 'https://debot.ai/',
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+            };
+        } else if (urlObj.hostname === 'chain.fm') {
+            headers = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'Origin': 'https://chain.fm',
+                'Referer': 'https://chain.fm/'
+            };
+        }
+        
+        await page.setExtraHTTPHeaders(headers);
 
         // 监听所有响应
         let targetResponse = null;

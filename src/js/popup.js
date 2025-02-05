@@ -1392,6 +1392,162 @@ document.addEventListener('DOMContentLoaded', function() {
         devTitle.innerHTML = `Dev(地址：<span class="creator-address" style="cursor: pointer; color: #666;" data-address="${creator}" title="点击复制地址">${shortenAddress(creator)}</span>，创业${totalProjects}次，成功${successProjects}次，最高市值${formatMarketCap(maxMarketCap)})`;
       }
 
+      // 尝试获取 Debot 数据
+      let debotHtml = '';
+      try {
+        // 获取当前代币地址
+        const currentToken = devData[0]?.mint;
+        if (!currentToken) throw new Error('未找到代币地址');
+
+        console.log('准备获取 Debot 数据，当前代币地址:', currentToken);
+
+        // 直接使用本地服务器获取数据
+        console.log('通过本地服务器获取 Debot 数据');
+        const localResponse = await fetch('http://localhost:3000', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: `https://debot.ai/api/dashboard/token/dev/info?chain=solana&token=${currentToken}`,
+            dataType: 'debot_dev_info',
+            params: {
+              method: 'GET',
+              headers: {
+                'Accept': '*/*',
+                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                'Content-Type': 'application/json',
+                'Origin': 'https://debot.ai',
+                'Referer': 'https://debot.ai/',
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+              }
+            }
+          })
+        });
+
+        console.log('本地服务器响应状态:', localResponse.status);
+        const responseText = await localResponse.text();
+        console.log('本地服务器原始响应:', responseText);
+
+        let localData;
+        try {
+          localData = JSON.parse(responseText);
+        } catch (e) {
+          console.error('解析响应JSON失败:', e);
+          throw new Error('解析服务器响应失败: ' + e.message);
+        }
+
+        console.log('本地服务器返回数据:', localData);
+
+        if (!localData.success) {
+          throw new Error(localData.error || '本地服务器返回错误');
+        }
+
+        const debotData = localData.response?.data;
+        if (!debotData) {
+          throw new Error('未能获取到有效的 Debot 数据');
+        }
+
+        // 检查数据有效性
+        if (debotData.code === 0 && debotData.data) {
+          const devTransData = debotData.data;
+          console.log('Dev交易数据:', devTransData);
+          
+          // 构建 Dev 操作表格
+          debotHtml = `
+            <div class="dev-transactions">
+              <div class="data-source-note">数据来源: Debot</div>
+              <div class="dev-trans-stats">
+                <div class="stat-item">
+                  <span class="stat-label">买入总量:</span>
+                  <span class="stat-value buy">${formatNumber(devTransData.buy_amount)}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">卖出总量:</span>
+                  <span class="stat-value sell">${formatNumber(devTransData.sell_amount)}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">转入总量:</span>
+                  <span class="stat-value">${formatNumber(devTransData.trans_in_amount)}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">转出总量:</span>
+                  <span class="stat-value">${formatNumber(devTransData.trans_out_amount)}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">当前持仓:</span>
+                  <span class="stat-value ${devTransData.position > 0 ? 'buy' : 'sell'}">${formatNumber(devTransData.position)}</span>
+                </div>
+              </div>
+              <table class="dev-trans-table">
+                <thead>
+                  <tr>
+                    <th>时间</th>
+                    <th>操作</th>
+                    <th>数量</th>
+                    <th>源地址</th>
+                    <th>目标地址</th>
+                  </tr>
+                </thead>
+                <tbody>
+          `;
+
+          // 添加交易记录
+          for (const tx of devTransData.transactions) {
+            const time = getRelativeTimeString(tx.time);
+            const operation = tx.op === 'buy' ? '买入' : 
+                           tx.op === 'sell' ? '卖出' :
+                           tx.op === 'trans_in' ? '转入' : '转出';
+            const opClass = tx.op === 'buy' ? 'buy' :
+                         tx.op === 'sell' ? 'sell' :
+                         tx.op === 'trans_in' ? 'trans-in' : 'trans-out';
+            
+            debotHtml += `
+              <tr>
+                <td>${time}</td>
+                <td><span class="op-badge ${opClass}">${operation}</span></td>
+                <td>${formatNumber(tx.amount)}</td>
+                <td>
+                  <a href="https://gmgn.ai/sol/address/${tx.from}" 
+                     class="address-link" 
+                     title="${tx.from}"
+                     target="_blank">${shortenAddress(tx.from)}</a>
+                </td>
+                <td>
+                  <a href="https://gmgn.ai/sol/address/${tx.to}" 
+                     class="address-link" 
+                     title="${tx.to}"
+                     target="_blank">${shortenAddress(tx.to)}</a>
+                </td>
+              </tr>
+            `;
+          }
+
+          debotHtml += `
+                </tbody>
+              </table>
+            </div>
+          `;
+        } else {
+          console.warn('Debot数据无效:', debotData);
+          throw new Error('Debot数据无效');
+        }
+      } catch (error) {
+        console.error('获取Debot数据失败:', error);
+        debotHtml = `
+          <div class="dev-transactions">
+            <div class="data-source-note">数据来源: Debot</div>
+            <div class="error-message">
+              <p>获取Debot数据失败: ${error.message}</p>
+              <details>
+                <summary>详细错误信息</summary>
+                <pre>${error.stack}</pre>
+              </details>
+            </div>
+          </div>
+        `;
+      }
+
       // 构建项目历史表格 HTML
       let projectsTableHtml = `
         <div class="dev-projects">
@@ -1443,7 +1599,7 @@ document.addEventListener('DOMContentLoaded', function() {
       // 添加表格样式
       const styleElement = document.createElement('style');
       styleElement.textContent = `
-        .dev-table {
+        .dev-table, .dev-trans-table {
           width: 100%;
           border-collapse: separate;
           border-spacing: 0;
@@ -1451,13 +1607,14 @@ document.addEventListener('DOMContentLoaded', function() {
           border-radius: 8px;
           overflow: hidden;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+          margin-bottom: 20px;
         }
 
-        .dev-table thead {
+        .dev-table thead, .dev-trans-table thead {
           background: #f8f9fa;
         }
 
-        .dev-table th {
+        .dev-table th, .dev-trans-table th {
           padding: 12px 16px;
           text-align: left;
           font-weight: 600;
@@ -1466,21 +1623,21 @@ document.addEventListener('DOMContentLoaded', function() {
           border-bottom: 1px solid #eee;
         }
 
-        .dev-table td {
+        .dev-table td, .dev-trans-table td {
           padding: 12px 16px;
           font-size: 14px;
           border-bottom: 1px solid #eee;
         }
 
-        .dev-table tr:last-child td {
+        .dev-table tr:last-child td, .dev-trans-table tr:last-child td {
           border-bottom: none;
         }
 
-        .dev-table tbody tr {
+        .dev-table tbody tr, .dev-trans-table tbody tr {
           transition: background-color 0.2s;
         }
 
-        .dev-table tbody tr:hover {
+        .dev-table tbody tr:hover, .dev-trans-table tbody tr:hover {
           background-color: #f8f9fa;
         }
 
@@ -1488,7 +1645,7 @@ document.addEventListener('DOMContentLoaded', function() {
           background-color: rgba(34, 197, 94, 0.1);
         }
 
-        .status-badge {
+        .status-badge, .op-badge {
           padding: 4px 8px;
           border-radius: 4px;
           font-size: 12px;
@@ -1504,11 +1661,80 @@ document.addEventListener('DOMContentLoaded', function() {
           background-color: rgba(239, 68, 68, 0.1);
           color: #ef4444;
         }
+
+        .op-badge.buy {
+          background-color: rgba(34, 197, 94, 0.1);
+          color: #22c55e;
+        }
+
+        .op-badge.sell {
+          background-color: rgba(239, 68, 68, 0.1);
+          color: #ef4444;
+        }
+
+        .op-badge.trans-in {
+          background-color: rgba(59, 130, 246, 0.1);
+          color: #3b82f6;
+        }
+
+        .op-badge.trans-out {
+          background-color: rgba(245, 158, 11, 0.1);
+          color: #f59e0b;
+        }
+
+        .dev-trans-stats {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 10px;
+          margin: 15px 0;
+          padding: 10px;
+          background: #f8f9fa;
+          border-radius: 8px;
+        }
+
+        .stat-item {
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+        }
+
+        .stat-label {
+          font-size: 12px;
+          color: #666;
+        }
+
+        .stat-value {
+          font-size: 14px;
+          font-weight: 600;
+        }
+
+        .stat-value.buy {
+          color: #22c55e;
+        }
+
+        .stat-value.sell {
+          color: #ef4444;
+        }
+
+        .address-link {
+          color: #3b82f6;
+          text-decoration: none;
+        }
+
+        .address-link:hover {
+          text-decoration: underline;
+        }
+
+        .data-source-note {
+          font-size: 12px;
+          color: #666;
+          margin-bottom: 10px;
+        }
       `;
       document.head.appendChild(styleElement);
 
-      // 更新容器内容
-      devContainer.innerHTML = projectsTableHtml;
+      // 更新容器内容 - 先显示 Debot 数据，再显示项目历史
+      devContainer.innerHTML = debotHtml + projectsTableHtml;
 
       // 添加地址点击复制功能
       const addressSpan = devTitle.querySelector('.creator-address');
