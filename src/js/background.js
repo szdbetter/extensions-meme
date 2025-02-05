@@ -128,22 +128,54 @@ async function fetchGMGNData(url) {
     const address = url.split('/sol/')[1].split('?')[0];
     console.log('正在通过本地服务器获取 GMGN 数据，地址:', address);
 
-    const response = await fetch('http://localhost:3000/api/gmgn', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ address })
-    });
+    // 构造 GMGN API 的参数
+    const params = {
+      device_id: '520cc162-92cd-4ee6-9add-25e40e359805',
+      client_id: 'gmgn_web_2025.0128.214338',
+      from_app: 'gmgn',
+      app_ver: '2025.0128.214338',
+      tz_name: 'Asia/Shanghai',
+      tz_offset: '28800',
+      app_lang: 'en'
+    };
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || `请求失败: ${response.status}`);
+    // 定义所有需要获取的 GMGN API
+    const apis = {
+      'Holder统计': `https://gmgn.ai/api/v1/token_stat/sol/${address}`,
+      '钱包分类': `https://gmgn.ai/api/v1/token_wallet_tags_stat/sol/${address}`,
+      'Top10持有': `https://gmgn.ai/api/v1/mutil_window_token_security_launchpad/sol/${address}`,
+      'Dev交易': `https://gmgn.ai/api/v1/token_trades/sol/${address}`
+    };
+
+    // 通过本地服务器获取所有数据
+    const results = {};
+    for (const [name, apiUrl] of Object.entries(apis)) {
+      console.log(`正在获取${name}数据...`);
+      const response = await fetch('http://localhost:3000', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: apiUrl,
+          dataType: `gmgn_${name}`,
+          params: name === 'Dev交易' ? { ...params, limit: 100, tag: 'creator' } : params
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`获取${name}数据失败: ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(`获取${name}数据失败: ${data.error}`);
+      }
+
+      results[name.toLowerCase()] = data.response.data;
     }
 
-    const data = await response.json();
-    console.log('本地服务器返回的 GMGN 数据:', data);
-    return data.data;
+    return results;
   } catch (error) {
     console.error('获取 GMGN 数据失败:', error);
     throw error;
@@ -176,131 +208,90 @@ async function fetchChainFMData(url, params) {
   }
 }
 
-// 备用的智能钱包数据获取函数
-async function fetchAlternativeSmartMoneyData(contractAddress) {
-  try {
-    console.log('尝试使用备用方案获取智能钱包数据，地址:', contractAddress);
-    
-    // 使用Solscan的API作为备选方案
-    const apiUrl = `https://public-api.solscan.io/token/meta?token=${contractAddress}`;
-
-    console.log('备用请求URL:', apiUrl);
-
-    const response = await fetch(apiUrl, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
-      },
-      timeout: 10000  // 10秒超时
-    });
-
-    console.log('备用方案响应状态:', response.status, response.statusText);
-
-    if (!response.ok) {
-      throw new Error(`请求失败: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    
-    console.log('备用方案返回的数据:', JSON.stringify(data, null, 2));
-
-    // 检查数据结构
-    if (!data || !data.address) {
-      console.warn('备用方案数据结构不正确:', data);
-      throw new Error('备用方案数据结构不正确');
-    }
-
-    return { 
-      success: true, 
-      data: data,
-      transactions: []  // Solscan API可能不直接提供交易数据
-    };
-  } catch (error) {
-    console.error('获取备用智能钱包数据失败:', error);
-    return { 
-      success: false, 
-      error: error.message,
-      errorType: error.constructor.name
-    };
-  }
-}
-
-// 修改原有的fetchSmartMoneyData函数，添加备用方案
+// 修改智能钱包数据获取函数
 async function fetchSmartMoneyData(contractAddress) {
   try {
     console.log('尝试获取智能钱包数据，地址:', contractAddress);
     
-    const apiUrl = `https://chain.fm/api/trpc/parsedTransaction.list?batch=1&input=${encodeURIComponent(
-      JSON.stringify({
-        "0": {
-          "json": {
-            "page": 1,
-            "pageSize": 30,
-            "dateRange": null,
-            "token": contractAddress,
-            "address": [],
-            "useFollowing": true,
-            "includeChannels": [],
-            "lastUpdateTime": null,
-            "events": []
-          },
-          "meta": {
-            "values": {
-              "dateRange": ["undefined"],
-              "lastUpdateTime": ["undefined"]
-            }
+    // 首先尝试直接获取
+    const params = {
+      "0": {
+        "json": {
+          "page": 1,
+          "pageSize": 30,
+          "dateRange": null,
+          "token": contractAddress,
+          "address": [],
+          "useFollowing": true,
+          "includeChannels": [],
+          "lastUpdateTime": null,
+          "events": []
+        },
+        "meta": {
+          "values": {
+            "dateRange": ["undefined"],
+            "lastUpdateTime": ["undefined"]
           }
         }
-      })
-    )}`;
+      }
+    };
 
-    console.log('请求URL:', apiUrl);
-
-    const response = await fetch(apiUrl, {
-      method: 'GET',
+    const response = await fetch('https://chain.fm/api/trpc/parsedTransaction.list?batch=1', {
+      method: 'POST',
       headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Origin': 'https://chain.fm',
+        'accept': '*/*',
+        'content-type': 'application/json',
         'Referer': 'https://chain.fm/',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+        'Origin': 'https://chain.fm'
       },
-      timeout: 10000  // 10秒超时
+      body: JSON.stringify(params)
     });
 
-    console.log('响应状态:', response.status, response.statusText);
-
     if (!response.ok) {
-      // 如果主API失败，尝试备用方案
-      console.warn('主API请求失败，尝试备用方案');
-      return await fetchAlternativeSmartMoneyData(contractAddress);
+      console.log('直连获取失败，尝试通过本地服务器获取');
+      // 通过本地服务器获取数据
+      const localResponse = await fetch('http://localhost:3000', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          url: 'https://chain.fm/api/trpc/parsedTransaction.list?batch=1',
+          dataType: 'smartMoney',
+          params: params
+        })
+      });
+
+      if (!localResponse.ok) {
+        throw new Error(`本地服务器请求失败: ${localResponse.status}`);
+      }
+
+      const localData = await localResponse.json();
+      if (!localData.success) {
+        throw new Error(localData.error || '本地服务器返回错误');
+      }
+
+      return {
+        success: true,
+        data: localData.response.data,
+        source: 'local_server'
+      };
     }
 
     const data = await response.json();
-    
-    console.log('返回的数据:', JSON.stringify(data, null, 2));
-
-    // 检查数据结构
-    if (!data || !data[0]?.result?.data?.json?.data) {
-      console.warn('数据结构不正确，尝试备用方案');
-      return await fetchAlternativeSmartMoneyData(contractAddress);
-    }
-
-    const transactions = data[0].result.data.json.data.parsedTransactions || [];
-    console.log('交易数量:', transactions.length);
-
-    return { 
-      success: true, 
+    return {
+      success: true,
       data: data,
-      transactions: transactions
+      source: 'direct'
     };
+
   } catch (error) {
-    console.error('获取聪明钱数据失败:', error);
-    
-    // 如果主API调用失败，尝试备用方案
-    console.warn('主API调用失败，尝试备用方案');
-    return await fetchAlternativeSmartMoneyData(contractAddress);
+    console.error('获取智能钱包数据失败:', error);
+    return {
+      success: false,
+      error: error.message,
+      errorType: error.constructor.name
+    };
   }
 }
 

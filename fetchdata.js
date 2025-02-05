@@ -103,7 +103,7 @@ app.use(cors());
 app.use(express.json());
 
 // 修改为通用的数据获取函数
-async function fetchData(url, dataType = '') {
+async function fetchData(url, dataType = '', params = null) {
     console.log(`${colors.cyan}[${getFormattedTime()}] 开始通过 Puppeteer 获取数据${colors.reset}`);
     console.log(`${colors.blue}URL: ${url}${colors.reset}`);
     console.log(`${colors.yellow}数据类型: ${dataType}${colors.reset}`);
@@ -126,11 +126,9 @@ async function fetchData(url, dataType = '') {
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
         await page.setExtraHTTPHeaders({
             'Accept': 'application/json',
-            'Origin': 'https://gmgn.ai',
-            'Referer': 'https://gmgn.ai/',
-            'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"'
+            'Content-Type': 'application/json',
+            'Origin': 'https://chain.fm',
+            'Referer': 'https://chain.fm/'
         });
 
         // 监听所有响应
@@ -159,27 +157,59 @@ async function fetchData(url, dataType = '') {
             }
         });
 
-        // 访问页面
-        console.log(`${colors.yellow}[${getFormattedTime()}] 正在加载页面...${colors.reset}`);
-        const response = await page.goto(url, {
-            waitUntil: 'networkidle0',
-            timeout: 30000
-        });
-
-        // 等待数据加载
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        if (!targetResponse && response.headers()['content-type']?.includes('application/json')) {
-            try {
-                const data = await response.json();
-                targetResponse = {
-                    url: url,
-                    status: response.status(),
-                    headers: response.headers(),
-                    data: data
+        // 如果有params参数，使用POST请求
+        if (params) {
+            console.log(`${colors.yellow}[${getFormattedTime()}] 发送POST请求...${colors.reset}`);
+            const response = await page.evaluate(async (url, params) => {
+                const resp = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'accept': '*/*',
+                        'content-type': 'application/json',
+                        'Referer': 'https://chain.fm/',
+                        'Origin': 'https://chain.fm'
+                    },
+                    body: JSON.stringify(params)
+                });
+                return {
+                    ok: resp.ok,
+                    status: resp.status,
+                    data: await resp.json()
                 };
-            } catch (e) {
-                console.error(`${colors.red}[${getFormattedTime()}] 解析主响应失败:${colors.reset}`, e);
+            }, url, params);
+
+            if (!response.ok) {
+                throw new Error(`POST请求失败: ${response.status}`);
+            }
+
+            targetResponse = {
+                url: url,
+                status: response.status,
+                data: response.data
+            };
+        } else {
+            // 访问页面
+            console.log(`${colors.yellow}[${getFormattedTime()}] 正在加载页面...${colors.reset}`);
+            const response = await page.goto(url, {
+                waitUntil: 'networkidle0',
+                timeout: 30000
+            });
+
+            // 等待数据加载
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            if (!targetResponse && response.headers()['content-type']?.includes('application/json')) {
+                try {
+                    const data = await response.json();
+                    targetResponse = {
+                        url: url,
+                        status: response.status(),
+                        headers: response.headers(),
+                        data: data
+                    };
+                } catch (e) {
+                    console.error(`${colors.red}[${getFormattedTime()}] 解析主响应失败:${colors.reset}`, e);
+                }
             }
         }
 
@@ -219,7 +249,7 @@ async function fetchData(url, dataType = '') {
 // API 路由
 app.post('/', async (req, res) => {
     try {
-        const { url, dataType } = req.body;
+        const { url, dataType, params } = req.body;
         if (!url) {
             return res.status(400).json({ 
                 success: false, 
@@ -231,8 +261,11 @@ app.post('/', async (req, res) => {
         console.log(`${colors.green}[${getFormattedTime()}] 收到请求${colors.reset}`);
         console.log(`${colors.blue}URL: ${url}${colors.reset}`);
         console.log(`${colors.yellow}数据类型: ${dataType || '未指定'}${colors.reset}`);
+        if (params) {
+            console.log(`${colors.magenta}参数: ${JSON.stringify(params)}${colors.reset}`);
+        }
         
-        const data = await fetchData(url, dataType);
+        const data = await fetchData(url, dataType, params);
         res.json(data);
     } catch (error) {
         console.error(`${colors.red}[${getFormattedTime()}] 服务器错误:${colors.reset}`, error);

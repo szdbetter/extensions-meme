@@ -1670,35 +1670,57 @@ document.addEventListener('DOMContentLoaded', function() {
       console.log('开始从本地服务器获取 GMGN 数据');
       console.log('请求地址:', address);
 
-      if (!address) {
-        throw new Error('地址参数为空');
+      // 构造 GMGN API 的参数
+      const params = {
+        device_id: '520cc162-92cd-4ee6-9add-25e40e359805',
+        client_id: 'gmgn_web_2025.0128.214338',
+        from_app: 'gmgn',
+        app_ver: '2025.0128.214338',
+        tz_name: 'Asia/Shanghai',
+        tz_offset: '28800',
+        app_lang: 'en'
+      };
+
+      // 定义所有需要获取的 GMGN API
+      const apis = {
+        'Holder统计': `https://gmgn.ai/api/v1/token_stat/sol/${address}`,
+        '钱包分类': `https://gmgn.ai/api/v1/token_wallet_tags_stat/sol/${address}`,
+        'Top10持有': `https://gmgn.ai/api/v1/mutil_window_token_security_launchpad/sol/${address}`,
+        'Dev交易': `https://gmgn.ai/api/v1/token_trades/sol/${address}`
+      };
+
+      // 通过本地服务器获取所有数据
+      const results = {};
+      for (const [name, apiUrl] of Object.entries(apis)) {
+        console.log(`正在获取${name}数据...`);
+        const response = await fetch('http://localhost:3000', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: apiUrl,
+            dataType: `gmgn_${name}`,
+            params: name === 'Dev交易' ? { ...params, limit: 100, tag: 'creator' } : params
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`获取${name}数据失败: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (!data.success) {
+          throw new Error(`获取${name}数据失败: ${data.error}`);
+        }
+
+        results[name.toLowerCase()] = data.response.data;
       }
 
-      console.log('发送请求到: http://localhost:3000/api/gmgn');
-      const response = await fetch('http://localhost:3000/api/gmgn', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ address })
-      });
-
-      console.log('收到响应，状态码:', response.status);
-      const responseData = await response.json();
-      console.log('响应数据:', responseData);
-
-      if (!response.ok) {
-        throw new Error(responseData.error || `请求失败: ${response.status}`);
-      }
-
-      if (!responseData.success) {
-        throw new Error(responseData.error || '获取数据失败');
-      }
-      
-      return responseData.data;
+      return results;
     } catch (error) {
       console.error('获取 GMGN 数据失败:', error);
-      console.error('错误堆栈:', error.stack);
+      console.error('错误堆栈:', error);
       throw error;
     }
   }
