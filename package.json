@@ -10,6 +10,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
     "puppeteer-core": "^24.1.1"
   }
 }

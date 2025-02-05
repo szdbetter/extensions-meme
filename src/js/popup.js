@@ -1354,68 +1354,41 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // 修改 fetchGMGNData 函数
+  // 修改 GMGN 数据获取函数
   async function fetchGMGNData(address) {
     try {
-      const url = `https://gmgn.ai/api/v1/token_stat/sol/${address}?device_id=520cc162-92cd-4ee6-9add-25e40e359805&client_id=gmgn_web_2025.0128.214338&from_app=gmgn&app_ver=2025.0128.214338&tz_name=Asia%2FShanghai&tz_offset=28800&app_lang=en`;
-      
-      // 如果在扩展环境中，通过 background 脚本发送请求
-      if (isExtensionEnvironment) {
-        const response = await new Promise((resolve, reject) => {
-          const timeoutId = setTimeout(() => {
-            reject(new Error('请求超时'));
-          }, 30000);
+      console.log('开始从本地服务器获取 GMGN 数据');
+      console.log('请求地址:', address);
 
-          chrome.runtime.sendMessage({
-            type: 'FETCH_GMGN_DATA',
-            url: url
-          }, (response) => {
-            clearTimeout(timeoutId);
-            if (chrome.runtime.lastError) {
-              console.error('消息发送错误:', chrome.runtime.lastError);
-              reject(new Error(chrome.runtime.lastError.message));
-            } else {
-              resolve(response);
-            }
-          });
-        });
-
-        if (!response.success) {
-          throw new Error(response.error || '请求失败');
-        }
-
-        return response.data;
-      } else {
-        // 在本地环境中直接发送请求
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'authority': 'gmgn.ai',
-            'accept': 'application/json, text/plain, */*',
-            'accept-language': 'zh-CN,zh;q=0.9',
-            'cache-control': 'no-cache',
-            'origin': 'https://gmgn.ai',
-            'pragma': 'no-cache',
-            'referer': 'https://gmgn.ai/',
-            'sec-ch-ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"macOS"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-origin',
-            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
-          },
-          credentials: 'include'
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        return await response.json();
+      if (!address) {
+        throw new Error('地址参数为空');
       }
+
+      console.log('发送请求到: http://localhost:3000/api/gmgn');
+      const response = await fetch('http://localhost:3000/api/gmgn', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ address })
+      });
+
+      console.log('收到响应，状态码:', response.status);
+      const responseData = await response.json();
+      console.log('响应数据:', responseData);
+
+      if (!response.ok) {
+        throw new Error(responseData.error || `请求失败: ${response.status}`);
+      }
+
+      if (!responseData.success) {
+        throw new Error(responseData.error || '获取数据失败');
+      }
+      
+      return responseData.data;
     } catch (error) {
-      console.error('获取GMGN数据失败:', error);
+      console.error('获取 GMGN 数据失败:', error);
+      console.error('错误堆栈:', error.stack);
       throw error;
     }
   }
@@ -1550,16 +1523,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
       // 获取 GMGN 数据
       try {
-        console.log('开始获取GMGN数据');
+        console.log('准备获取 GMGN 数据，地址:', address);
         const gmgnData = await fetchGMGNData(address);
-        console.log('GMGN数据:', gmgnData);
+        console.log('成功获取 GMGN 数据:', gmgnData);
         displayGMGNData(gmgnData);
       } catch (error) {
-        console.error('GMGN数据获取失败:', error);
+        console.error('GMGN 数据获取失败:', error);
         displayGMGNData({
           error: true,
           message: error.message,
-          stack: error.stack
+          stack: error.stack,
+          timestamp: new Date().toISOString(),
+          requestedAddress: address
         });
       }
 

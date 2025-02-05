@@ -1,4 +1,22 @@
 {
+  "manifest_version": 2,
+  "name": "Solana Meme Tracker",
+  "version": "1.0",
+  "description": "Track Solana meme tokens information",
+  "permissions": [
+    "http://localhost:3000/*",
+    "https://gmgn.ai/*",
+    "storage",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "http://localhost:3000/*",
+    "https://gmgn.ai/*"
+  ],
+  "background": {
+    "scripts": ["js/background.js"],
+    "persistent": true
+  },
   "browser_action": {
     "default_popup": "popup.html",
     "default_icon": {
