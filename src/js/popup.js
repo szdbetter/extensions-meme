@@ -1290,52 +1290,72 @@ document.addEventListener('DOMContentLoaded', function() {
   // 修改fetchSmartMoneyData函数
   async function fetchSmartMoneyData(address) {
     try {
-      let response;
+      console.log(`尝试获取智能钱包数据，地址: ${address}`);
+      console.log(`访问链接: https://chain.fm/api/trpc/parsedTransaction.list?batch=1`);
       
-      if (isExtensionEnvironment) {
-        // 在扩展环境中使用chrome.runtime.sendMessage
-        response = await new Promise((resolve, reject) => {
-          const timeoutId = setTimeout(() => {
-            reject(new Error('请求超时'));
-          }, 30000);
-
-          chrome.runtime.sendMessage({
-            type: 'FETCH_SMART_MONEY',
-            address: address
-          }, (response) => {
-            clearTimeout(timeoutId);
-            if (chrome.runtime.lastError) {
-              console.error('消息发送错误:', chrome.runtime.lastError);
-              reject(new Error(chrome.runtime.lastError.message));
-            } else {
-              resolve(response);
+      // 构造请求参数
+      const params = {
+        input: {
+          "0": {
+            "json": {
+              "page": 1,
+              "pageSize": 30,
+              "dateRange": null,
+              "token": address,
+              "address": [],
+              "useFollowing": true,
+              "includeChannels": [],
+              "lastUpdateTime": null,
+              "events": []
+            },
+            "meta": {
+              "values": {
+                "dateRange": ["undefined"],
+                "lastUpdateTime": ["undefined"]
+              }
             }
-          });
-        });
-      } else {
-        // 在本地调试模式下直接调用API
-        response = await mockExtensionRequest('FETCH_SMART_MONEY', { address });
+          }
+        }
+      };
+
+      console.log('请求参数:', JSON.stringify(params, null, 2));
+
+      // 尝试通过本地服务器获取数据
+      const localResponse = await fetch('http://localhost:3000', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          url: 'https://chain.fm/api/trpc/parsedTransaction.list?batch=1',
+          dataType: 'smartMoney',
+          params: params
+        })
+      });
+
+      if (!localResponse.ok) {
+        throw new Error(`本地服务器请求失败: ${localResponse.status}`);
       }
 
-      // 调试日志
-      console.log('智能钱包数据响应:', response);
+      const localData = await localResponse.json();
+      console.log('本地服务器返回数据:', localData);
 
-      // 检查响应是否存在
-      if (!response) {
-        throw new Error('获取聪明钱数据失败: 无响应');
+      if (!localData.success) {
+        throw new Error(localData.error || '本地服务器返回错误');
       }
 
-      // 检查响应是否成功
-      if (!response.success) {
-        throw new Error(`获取聪明钱数据失败: ${response.error || '请求失败'}`);
-      }
+      return {
+        success: true,
+        data: localData.response.data,
+        source: 'local_server'
+      };
 
-      return response;
     } catch (error) {
-      console.error('获取聪明钱数据失败:', error);
-      return { 
-        success: false, 
-        error: error.message 
+      console.error('获取智能钱包数据失败:', error);
+      return {
+        success: false,
+        error: error.message,
+        errorType: error.constructor.name
       };
     }
   }
@@ -1412,14 +1432,8 @@ document.addEventListener('DOMContentLoaded', function() {
             url: `https://debot.ai/api/dashboard/token/dev/info?chain=solana&token=${currentToken}`,
             dataType: 'debot_dev_info',
             params: {
-              method: 'GET',
               headers: {
-                'Accept': '*/*',
-                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
                 'Content-Type': 'application/json',
-                'Origin': 'https://debot.ai',
-                'Referer': 'https://debot.ai/',
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
               }
             }
           })
@@ -1456,37 +1470,15 @@ document.addEventListener('DOMContentLoaded', function() {
           // 构建 Dev 操作表格
           debotHtml = `
             <div class="dev-transactions">
-              <div class="data-source-note">数据来源: Debot</div>
-              <div class="dev-trans-stats">
-                <div class="stat-item">
-                  <span class="stat-label">买入总量:</span>
-                  <span class="stat-value buy">${formatNumber(devTransData.buy_amount)}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">卖出总量:</span>
-                  <span class="stat-value sell">${formatNumber(devTransData.sell_amount)}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">转入总量:</span>
-                  <span class="stat-value">${formatNumber(devTransData.trans_in_amount)}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">转出总量:</span>
-                  <span class="stat-value">${formatNumber(devTransData.trans_out_amount)}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">当前持仓:</span>
-                  <span class="stat-value ${devTransData.position > 0 ? 'buy' : 'sell'}">${formatNumber(devTransData.position)}</span>
-                </div>
-              </div>
+              <div class="data-source-note">Dev持仓</div>
               <table class="dev-trans-table">
                 <thead>
                   <tr>
-                    <th>时间</th>
                     <th>操作</th>
-                    <th>数量</th>
                     <th>源地址</th>
                     <th>目标地址</th>
+                    <th>数量</th>
+                    <th>时间</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1504,9 +1496,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             debotHtml += `
               <tr>
-                <td>${time}</td>
                 <td><span class="op-badge ${opClass}">${operation}</span></td>
-                <td>${formatNumber(tx.amount)}</td>
                 <td>
                   <a href="https://gmgn.ai/sol/address/${tx.from}" 
                      class="address-link" 
@@ -1519,6 +1509,8 @@ document.addEventListener('DOMContentLoaded', function() {
                      title="${tx.to}"
                      target="_blank">${shortenAddress(tx.to)}</a>
                 </td>
+                <td>${formatNumber(tx.amount)}</td>
+                <td>${time}</td>
               </tr>
             `;
           }
@@ -1798,6 +1790,7 @@ document.addEventListener('DOMContentLoaded', function() {
         '钱包分类': `https://gmgn.ai/api/v1/token_wallet_tags_stat/sol/${address}`,
         'Top10持有': `https://gmgn.ai/api/v1/mutil_window_token_security_launchpad/sol/${address}`,
         'Dev交易': `https://gmgn.ai/api/v1/token_trades/sol/${address}`
+
       };
 
       // 通过本地服务器获取所有数据

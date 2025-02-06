@@ -109,7 +109,7 @@ async function fetchData(url, dataType = '', params = null) {
     console.log(`${colors.yellow}数据类型: ${dataType}${colors.reset}`);
     
     const browser = await puppeteer.launch({
-        headless: true,
+        headless: false,
         executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
         args: [
             '--no-sandbox',
