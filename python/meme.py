@@ -6,10 +6,10 @@ Solana代币信息查询工具
 """
 
 from PySide6.QtWidgets import (QApplication, QMainWindow, QPushButton, QLineEdit, 
-                             QTextEdit, QLabel, QTableView)
+                             QTextEdit, QLabel, QTableView, QStyledItemDelegate, QStyle, QHeaderView)
 from PySide6.QtUiTools import QUiLoader
-from PySide6.QtCore import Qt, QCoreApplication, QAbstractTableModel, QModelIndex
-from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt, QCoreApplication, QAbstractTableModel, QModelIndex, QThread, Signal
+from PySide6.QtGui import QPixmap, QColor, QBrush, QFont, QPalette
 import sys
 import os
 import requests
@@ -17,9 +17,57 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 import json
 import base64
+import locale
 
 # 设置Qt属性
 QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
+
+# 设置数字格式化
+locale.setlocale(locale.LC_ALL, '')
+
+class TableStyleDelegate(QStyledItemDelegate):
+    """表格样式代理类"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.header_font = QFont()
+        self.header_font.setPointSize(12)  # 设置表头字体大小
+
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+        
+        # 设置表头样式
+        if isinstance(index.model(), QAbstractTableModel):
+            if index.parent().isValid() == False and index.model().headerData(index.row(), Qt.Vertical, Qt.DisplayRole) is not None:
+                option.font = self.header_font
+                return
+            
+        # 设置买卖操作的背景色
+        model = index.model()
+        if hasattr(model, '_data') and index.row() < len(model._data):
+            op = model._data[index.row()].get('op', '')
+            if op == 'buy':
+                option.backgroundBrush = QBrush(QColor('#e6ffe6'))  # 浅绿色
+            elif op == 'sell':
+                option.backgroundBrush = QBrush(QColor('#ffe6e6'))  # 浅红色
+
+class ApiWorker(QThread):
+    """API异步工作线程"""
+    finished = Signal(object)  # 完成信号
+    error = Signal(str)      # 错误信号
+
+    def __init__(self, api_call, *args, **kwargs):
+        super().__init__()
+        self.api_call = api_call
+        self.args = args
+        self.kwargs = kwargs
+
+    def run(self):
+        try:
+            result = self.api_call(*self.args, **self.kwargs)
+            self.finished.emit(result)
+        except Exception as e:
+            self.error.emit(str(e))
 
 class DevHistoryTableModel(QAbstractTableModel):
     """开发者历史发币表格模型"""
@@ -73,10 +121,11 @@ class DevHistoryTableModel(QAbstractTableModel):
 class DevTradeTableModel(QAbstractTableModel):
     """开发者交易记录表格模型"""
     
-    def __init__(self, data: List[Dict[str, Any]], parent=None):
+    def __init__(self, data: List[Dict[str, Any]], creator: str, parent=None):
         super().__init__(parent)
         self._data = data
         self._headers = ["操作", "From", "To", "金额", "数量", "时间"]
+        self.creator = creator
 
     def rowCount(self, parent=QModelIndex()) -> int:
         return len(self._data)
@@ -101,16 +150,17 @@ class DevTradeTableModel(QAbstractTableModel):
                 }
                 return op_map.get(row_data.get('op', ''), '')
             elif col == 1:
-                return self.format_address(row_data.get('from', ''))
+                address = row_data.get('from', '')
+                return "Dev" if address == self.creator else self.format_address(address)
             elif col == 2:
-                return self.format_address(row_data.get('to', ''))
+                address = row_data.get('to', '')
+                return "Dev" if address == self.creator else self.format_address(address)
             elif col == 3:
-                op = row_data.get('op', '')
-                if op in ['trans_in', 'trans_out']:
-                    return ''
-                return str(row_data.get('volume', ''))
+                volume = row_data.get('volume', 0)
+                return locale.format_string("%d", int(volume), grouping=True) if volume else ''
             elif col == 4:
-                return str(row_data.get('amount', ''))
+                amount = row_data.get('amount', 0)
+                return locale.format_string("%d", int(amount), grouping=True)
             elif col == 5:
                 timestamp = row_data.get('time', 0)
                 return TimeUtil.get_time_diff(timestamp * 1000)  # 转换为毫秒
@@ -356,12 +406,52 @@ class MainWindow(QMainWindow):
                    self.labelDevInfo, self.tableDevHistory, self.tableDevTrade]):
             self.show_error_and_exit("错误: 无法找到所有必需的UI控件")
 
+        # 设置按钮样式
+        self.btnQuery.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                border: none;
+                padding: 5px 15px;
+                border-radius: 4px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+            QPushButton:pressed {
+                background-color: #2472a4;
+            }
+        """)
+
+        # 设置表格样式
+        table_delegate = TableStyleDelegate()
+        for table in [self.tableDevHistory, self.tableDevTrade]:
+            table.setItemDelegate(table_delegate)
+            table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            table.setStyleSheet("""
+                QTableView {
+                    border: 1px solid #dcdcdc;
+                    gridline-color: #f0f0f0;
+                    background-color: white;
+                }
+                QHeaderView::section {
+                    background-color: #f8f9fa;
+                    padding: 4px;
+                    border: none;
+                    border-bottom: 1px solid #dcdcdc;
+                }
+                QTableView::item {
+                    padding: 4px;
+                }
+                QTableView::item:selected {
+                    background-color: #e8f0fe;
+                }
+            """)
+
         # 设置默认CA地址
         default_ca = "9DHe3pycTuymFk4H4bbPoAJ4hQrr2kaLDF6J6aAKpump"
         self.leCA.setText(default_ca)
-
-        # 自动触发查询
-        self.query_coin_info()
 
     def format_coin_info(self, coin_data: Dict[str, Any]) -> str:
         """
@@ -492,7 +582,7 @@ class MainWindow(QMainWindow):
         trade_data = DevDataFetcher.fetch_dev_trades(coin_data.get('mint', ''))
         if trade_data and 'transactions' in trade_data:
             # 更新交易表格
-            trade_model = DevTradeTableModel(trade_data['transactions'])
+            trade_model = DevTradeTableModel(trade_data['transactions'], creator)
             self.tableDevTrade.setModel(trade_model)
             self.tableDevTrade.resizeColumnsToContents()
 
@@ -500,59 +590,91 @@ class MainWindow(QMainWindow):
         """查询代币信息"""
         contract_address = self.leCA.text().strip()
         if not contract_address:
-            error_html = """
-            <html>
-            <head>
-            <style type="text/css">
-                .error-message {
-                    color: #e74c3c;
-                    font-family: Arial, sans-serif;
-                    padding: 10px;
-                    font-size: 14px;
-                }
-            </style>
-            </head>
-            <body>
-                <div class='error-message'>
-                    请输入代币合约地址
-                </div>
-            </body>
-            </html>
-            """
-            self.txtCoinInfo.setHtml(error_html)
+            self.show_error_message("请输入代币合约地址")
             return
+
+        # 禁用查询按钮
+        self.btnQuery.setEnabled(False)
+        self.btnQuery.setText("查询中...")
             
-        # 获取代币数据
-        coin_data = CoinDataFetcher.fetch_coin_data(contract_address)
-        
+        # 创建异步工作线程获取代币数据
+        self.coin_worker = ApiWorker(CoinDataFetcher.fetch_coin_data, contract_address)
+        self.coin_worker.finished.connect(self.on_coin_data_received)
+        self.coin_worker.error.connect(self.on_api_error)
+        self.coin_worker.start()
+
+    def on_coin_data_received(self, coin_data):
+        """处理代币数据"""
         if coin_data:
             # 显示代币信息
             self.txtCoinInfo.setHtml(self.format_coin_info(coin_data))
-            self.txtCoinInfo.setOpenExternalLinks(True)  # 允许打开外部链接
+            self.txtCoinInfo.setOpenExternalLinks(True)
             
-            # 更新开发者信息
-            self.update_dev_info(coin_data)
+            # 异步获取开发者信息
+            creator = coin_data.get('creator')
+            if creator:
+                self.history_worker = ApiWorker(DevDataFetcher.fetch_dev_history, creator)
+                self.history_worker.finished.connect(lambda data: self.on_history_data_received(data, creator))
+                self.history_worker.error.connect(self.on_api_error)
+                self.history_worker.start()
+
+                self.trade_worker = ApiWorker(DevDataFetcher.fetch_dev_trades, coin_data.get('mint', ''))
+                self.trade_worker.finished.connect(lambda data: self.on_trade_data_received(data, creator))
+                self.trade_worker.error.connect(self.on_api_error)
+                self.trade_worker.start()
         else:
-            error_html = """
-            <html>
-            <head>
-            <style type="text/css">
-                .error-message {
-                    color: #e74c3c;
-                    font-family: Arial, sans-serif;
-                    padding: 10px;
-                    font-size: 14px;
-                }
-            </style>
-            </head>
-            <body>
-                <div class='error-message'>
-                    未找到代币信息或发生错误
-                </div>
-            </body>
-            </html>
-            """
-            self.txtCoinInfo.setHtml(error_html)
+            self.show_error_message("未找到代币信息或发生错误")
+        
+        # 恢复查询按钮
+        self.btnQuery.setEnabled(True)
+        self.btnQuery.setText("查询")
+
+    def on_history_data_received(self, history_data, creator):
+        """处理历史数据"""
+        if history_data:
+            self.labelDevInfo.setText(DevDataFetcher.format_dev_info(history_data))
+            
+            sorted_history = sorted(history_data, 
+                                  key=lambda x: (x.get('usd_market_cap', 0), x.get('created_timestamp', 0)), 
+                                  reverse=True)
+            
+            history_model = DevHistoryTableModel(sorted_history)
+            self.tableDevHistory.setModel(history_model)
+
+    def on_trade_data_received(self, trade_data, creator):
+        """处理交易数据"""
+        if trade_data and 'transactions' in trade_data:
+            trade_model = DevTradeTableModel(trade_data['transactions'], creator)
+            self.tableDevTrade.setModel(trade_model)
+
+    def on_api_error(self, error_msg):
+        """处理API错误"""
+        self.show_error_message(f"API请求错误: {error_msg}")
+        self.btnQuery.setEnabled(True)
+        self.btnQuery.setText("查询")
+
+    def show_error_message(self, message: str):
+        """显示错误信息"""
+        error_html = f"""
+        <html>
+        <head>
+        <style type="text/css">
+            .error-message {{
+                color: #e74c3c;
+                font-family: Arial, sans-serif;
+                padding: 10px;
+                font-size: 14px;
+            }}
+        </style>
+        </head>
+        <body>
+            <div class='error-message'>
+                {message}
+            </div>
+        </body>
+        </html>
+        """
+        self.txtCoinInfo.setHtml(error_html)
 
     @staticmethod
     def show_error_and_exit(message: str):
