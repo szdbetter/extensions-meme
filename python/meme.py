@@ -6,10 +6,12 @@ Solana代币信息查询工具
 """
 
 from PySide6.QtWidgets import (QApplication, QMainWindow, QPushButton, QLineEdit, 
-                             QTextEdit, QLabel, QTableView, QStyledItemDelegate, QStyle, QHeaderView)
+                             QTextEdit, QLabel, QTableView, QStyledItemDelegate, QStyle, QHeaderView,
+                             QListView)
 from PySide6.QtUiTools import QUiLoader
-from PySide6.QtCore import Qt, QCoreApplication, QAbstractTableModel, QModelIndex, QThread, Signal
-from PySide6.QtGui import QPixmap, QColor, QBrush, QFont, QPalette
+from PySide6.QtCore import Qt, QCoreApplication, QAbstractTableModel, QModelIndex, QThread, Signal, QDateTime
+from PySide6.QtGui import (QPixmap, QColor, QBrush, QFont, QPalette, 
+                          QStandardItemModel, QStandardItem)
 import sys
 import os
 import requests
@@ -395,16 +397,49 @@ class MainWindow(QMainWindow):
 
     def init_controls(self):
         """初始化并验证控件"""
-        self.btnQuery = self.ui.findChild(QPushButton, 'btnQuery')
-        self.leCA = self.ui.findChild(QLineEdit, 'leCA')
-        self.txtCoinInfo = self.ui.findChild(QTextEdit, 'txtCoinInfo')
-        self.labelDevInfo = self.ui.findChild(QLabel, 'labelDevInfo')
-        self.tableDevHistory = self.ui.findChild(QTableView, 'tableDevHistory')
-        self.tableDevTrade = self.ui.findChild(QTableView, 'tableDevTrade')
+        # 定义所有需要的控件及其名称
+        controls = {
+            'btnQuery': (QPushButton, '查询按钮'),
+            'leCA': (QLineEdit, '合约地址输入框'),
+            'txtCoinInfo': (QTextEdit, '代币信息显示区'),
+            'labelDevInfo': (QLabel, '开发者信息标签'),
+            'labelDevHistory': (QLabel, '开发者历史标签'),
+            'labelDevTrade': (QLabel, '开发者交易标签'),
+            'tableDevHistory': (QTableView, '开发者历史表格'),
+            'tableDevTrade': (QTableView, '开发者交易表格'),
+            'listViewLog': (QListView, '日志列表'),
+            'labelCoinPic': (QLabel, '代币图片'),
+            'labelCoinSymbol': (QLabel, '代币名称'),
+            'labelCoinDescription': (QLabel, '代币描述')
+        }
 
-        if not all([self.btnQuery, self.leCA, self.txtCoinInfo, 
-                   self.labelDevInfo, self.tableDevHistory, self.tableDevTrade]):
-            self.show_error_and_exit("错误: 无法找到所有必需的UI控件")
+        # 检查每个控件
+        missing_controls = []
+        for control_name, (control_type, display_name) in controls.items():
+            control = self.ui.findChild(control_type, control_name)
+            if control is None:
+                missing_controls.append(f"{display_name}({control_name})")
+            setattr(self, control_name, control)
+
+        if missing_controls:
+            self.show_error_and_exit(f"错误: 以下UI控件未找到:\n" + "\n".join(missing_controls))
+
+        # 初始化日志列表模型
+        self.log_model = QStandardItemModel()
+        self.listViewLog.setModel(self.log_model)
+
+        # 设置列表视图样式
+        self.listViewLog.setStyleSheet("""
+            QListView {
+                border: 1px solid #dcdcdc;
+                background-color: white;
+                font-size: 12px;
+            }
+            QListView::item {
+                padding: 4px;
+                border-bottom: 1px solid #f0f0f0;
+            }
+        """)
 
         # 设置按钮样式
         self.btnQuery.setStyleSheet("""
@@ -586,6 +621,17 @@ class MainWindow(QMainWindow):
             self.tableDevTrade.setModel(trade_model)
             self.tableDevTrade.resizeColumnsToContents()
 
+    def add_log(self, operation: str, status: str = ""):
+        """添加日志到列表视图"""
+        current_time = QDateTime.currentDateTime().toString("yyyy-MM-dd HH:mm:ss")
+        log_text = f"{current_time} - {operation}"
+        if status:
+            log_text += f" - {status}"
+        
+        item = QStandardItem(log_text)
+        self.log_model.insertRow(0, item)  # 在顶部插入
+        self.listViewLog.scrollToTop()  # 滚动到顶部
+
     def query_coin_info(self):
         """查询代币信息"""
         contract_address = self.leCA.text().strip()
@@ -596,6 +642,9 @@ class MainWindow(QMainWindow):
         # 禁用查询按钮
         self.btnQuery.setEnabled(False)
         self.btnQuery.setText("查询中...")
+        
+        # 添加日志
+        self.add_log(f"开始查询代币信息", f"合约地址: {contract_address}")
             
         # 创建异步工作线程获取代币数据
         self.coin_worker = ApiWorker(CoinDataFetcher.fetch_coin_data, contract_address)
@@ -606,13 +655,21 @@ class MainWindow(QMainWindow):
     def on_coin_data_received(self, coin_data):
         """处理代币数据"""
         if coin_data:
+            # 添加日志
+            self.add_log("获取代币信息成功", f"代币: {coin_data.get('name', '')} ({coin_data.get('symbol', '')})")
+            
             # 显示代币信息
             self.txtCoinInfo.setHtml(self.format_coin_info(coin_data))
             self.txtCoinInfo.setOpenExternalLinks(True)
+
+            # 更新代币相关标签
+            self.update_coin_labels(coin_data)
             
             # 异步获取开发者信息
             creator = coin_data.get('creator')
             if creator:
+                self.add_log("开始获取开发者信息", f"开发者地址: {creator}")
+                
                 self.history_worker = ApiWorker(DevDataFetcher.fetch_dev_history, creator)
                 self.history_worker.finished.connect(lambda data: self.on_history_data_received(data, creator))
                 self.history_worker.error.connect(self.on_api_error)
@@ -624,6 +681,7 @@ class MainWindow(QMainWindow):
                 self.trade_worker.start()
         else:
             self.show_error_message("未找到代币信息或发生错误")
+            self.add_log("获取代币信息失败")
         
         # 恢复查询按钮
         self.btnQuery.setEnabled(True)
@@ -632,6 +690,8 @@ class MainWindow(QMainWindow):
     def on_history_data_received(self, history_data, creator):
         """处理历史数据"""
         if history_data:
+            self.add_log("获取开发者历史记录成功", f"历史发币数: {len(history_data)}")
+            
             self.labelDevInfo.setText(DevDataFetcher.format_dev_info(history_data))
             
             sorted_history = sorted(history_data, 
@@ -644,11 +704,14 @@ class MainWindow(QMainWindow):
     def on_trade_data_received(self, trade_data, creator):
         """处理交易数据"""
         if trade_data and 'transactions' in trade_data:
+            self.add_log("获取交易记录成功", f"交易数: {len(trade_data['transactions'])}")
+            
             trade_model = DevTradeTableModel(trade_data['transactions'], creator)
             self.tableDevTrade.setModel(trade_model)
 
     def on_api_error(self, error_msg):
         """处理API错误"""
+        self.add_log("API请求错误", error_msg)
         self.show_error_message(f"API请求错误: {error_msg}")
         self.btnQuery.setEnabled(True)
         self.btnQuery.setText("查询")
@@ -675,6 +738,48 @@ class MainWindow(QMainWindow):
         </html>
         """
         self.txtCoinInfo.setHtml(error_html)
+
+    def update_coin_labels(self, coin_data: Dict[str, Any]):
+        """更新代币相关标签"""
+        # 设置代币名称
+        symbol_text = f"{coin_data.get('name', 'Unknown')} ({coin_data.get('symbol', '')})"
+        self.labelCoinSymbol.setText(symbol_text)
+        self.labelCoinSymbol.setStyleSheet("""
+            QLabel {
+                font-size: 16px;
+                font-weight: bold;
+                color: #333;
+                padding: 5px;
+            }
+        """)
+
+        # 设置代币描述
+        description = coin_data.get('description', '暂无描述')
+        self.labelCoinDescription.setText(description)
+        self.labelCoinDescription.setStyleSheet("""
+            QLabel {
+                font-size: 14px;
+                color: #666;
+                padding: 5px;
+                line-height: 1.4;
+            }
+        """)
+        self.labelCoinDescription.setWordWrap(True)  # 允许文字换行
+
+        # 设置代币图片
+        image_uri = coin_data.get('image_uri', '')
+        if image_uri:
+            ImageHandler.download_and_display_image(image_uri, self.labelCoinPic)
+            self.labelCoinPic.setMinimumSize(64, 64)
+            self.labelCoinPic.setMaximumSize(64, 64)
+            self.labelCoinPic.setScaledContents(True)
+            self.labelCoinPic.setStyleSheet("""
+                QLabel {
+                    border: 1px solid #dcdcdc;
+                    border-radius: 4px;
+                    padding: 2px;
+                }
+            """)
 
     @staticmethod
     def show_error_and_exit(message: str):
