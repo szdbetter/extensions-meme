@@ -126,7 +126,7 @@ class DevTradeTableModel(QAbstractTableModel):
     def __init__(self, data: List[Dict[str, Any]], creator: str, parent=None):
         super().__init__(parent)
         self._data = data
-        self._headers = ["操作", "From", "To", "金额", "数量", "时间"]
+        self._headers = ["操作", "From", "To", "价格", "金额", "数量", "时间"]
         self.creator = creator
 
     def rowCount(self, parent=QModelIndex()) -> int:
@@ -158,12 +158,15 @@ class DevTradeTableModel(QAbstractTableModel):
                 address = row_data.get('to', '')
                 return "Dev" if address == self.creator else self.format_address(address)
             elif col == 3:
+                price = row_data.get('price', 0)
+                return f"${price:.6f}" if price else ''
+            elif col == 4:
                 volume = row_data.get('volume', 0)
                 return locale.format_string("%d", int(volume), grouping=True) if volume else ''
-            elif col == 4:
-                amount = row_data.get('amount', 0)
-                return locale.format_string("%d", int(amount), grouping=True)
             elif col == 5:
+                amount = row_data.get('amount', 0)
+                return locale.format_string("%d", int(amount), grouping=True) if amount else ''
+            elif col == 6:
                 timestamp = row_data.get('time', 0)
                 return TimeUtil.get_time_diff(timestamp * 1000)  # 转换为毫秒
         
@@ -220,20 +223,55 @@ class DevDataFetcher:
             return None
 
     @staticmethod
-    def format_dev_info(history_data: List[Dict[str, Any]]) -> str:
+    def format_dev_info(creator: str, original_text: str = "") -> str:
         """格式化开发者信息"""
+        dev_info = f"""{original_text} 
+                  <a href='https://gmgn.ai/sol/address/{creator}' style='color: #3498db; text-decoration: none;'>{creator}</a>
+                  <span style='cursor: pointer;' onclick='navigator.clipboard.writeText("{creator}")'>📋</span>"""
+        return f"""
+        <html>
+        <head>
+        <style>
+            a:hover {{ text-decoration: underline; }}
+        </style>
+        </head>
+        <body>
+            {dev_info}
+        </body>
+        </html>
+        """
+
+    @staticmethod
+    def format_dev_history(history_data: List[Dict[str, Any]]) -> str:
+        """格式化开发者历史信息"""
         if not history_data:
-            return "未找到开发者信息"
+            return "未找到开发者历史信息"
             
-        creator = history_data[0].get('creator', '')
         total_coins = len(history_data)
         success_coins = sum(1 for coin in history_data if coin.get('complete', False))
         max_market_cap = max((coin.get('usd_market_cap', 0) for coin in history_data), default=0)
         
-        formatted_creator = f"{creator[:3]}...{creator[-3:]}" if len(creator) > 6 else creator
-        formatted_market_cap = DevHistoryTableModel.format_market_cap(max_market_cap)
+        total_display = f"{total_coins}+" if total_coins >= 10 else str(total_coins)
+        success_display = f"{success_coins}+" if success_coins >= 10 else str(success_coins)
+        market_cap_display = DevHistoryTableModel.format_market_cap(max_market_cap)
         
-        return f"Dev信息（地址：{formatted_creator}，历史创建：{total_coins}次，成功{success_coins}次，最高市值：{formatted_market_cap}）"
+        return f"发币：{total_display}次，成功：{success_display}次，最高市值：{market_cap_display}"
+
+    @staticmethod
+    def format_dev_trade_status(trade_data: Dict[str, Any]) -> str:
+        """格式化开发者交易状态"""
+        status = []
+        
+        if trade_data.get('position_clear'):
+            status.append("<span style='color: #e74c3c;'>清仓</span>")
+        if trade_data.get('position_increase'):
+            status.append("加仓")
+        if trade_data.get('position_decrease'):
+            status.append("减仓")
+        if trade_data.get('trans_out_amount', 0) > 0:
+            status.append("转出")
+            
+        return "，".join(status) if status else "无操作"
 
 class CoinDataFetcher:
     """代币数据获取类"""
@@ -439,6 +477,12 @@ class MainWindow(QMainWindow):
                 padding: 4px;
                 border-bottom: 1px solid #f0f0f0;
             }
+            QListView::item:nth-child(odd) {
+                background-color: #f8f9fa;
+            }
+            QListView::item:nth-child(even) {
+                background-color: white;
+            }
         """)
 
         # 设置按钮样式
@@ -601,7 +645,8 @@ class MainWindow(QMainWindow):
         history_data = DevDataFetcher.fetch_dev_history(creator)
         if history_data:
             # 更新开发者信息标签
-            self.labelDevInfo.setText(DevDataFetcher.format_dev_info(history_data))
+            self.labelDevInfo.setText(DevDataFetcher.format_dev_info(creator))
+            self.labelDevHistory.setText(DevDataFetcher.format_dev_history(history_data))
             
             # 按市值排序
             sorted_history = sorted(history_data, 
@@ -629,6 +674,13 @@ class MainWindow(QMainWindow):
             log_text += f" - {status}"
         
         item = QStandardItem(log_text)
+        # 设置交替颜色
+        row = self.log_model.rowCount()
+        if row % 2 == 0:
+            item.setBackground(QBrush(QColor("#f8f9fa")))
+        else:
+            item.setBackground(QBrush(QColor("#ffffff")))
+            
         self.log_model.insertRow(0, item)  # 在顶部插入
         self.listViewLog.scrollToTop()  # 滚动到顶部
 
@@ -692,8 +744,14 @@ class MainWindow(QMainWindow):
         if history_data:
             self.add_log("获取开发者历史记录成功", f"历史发币数: {len(history_data)}")
             
-            self.labelDevInfo.setText(DevDataFetcher.format_dev_info(history_data))
+            # 更新开发者信息标签，保留原有文本
+            original_text = self.labelDevInfo.text()
+            self.labelDevInfo.setText(DevDataFetcher.format_dev_info(creator, original_text))
+            self.labelDevInfo.setOpenExternalLinks(True)  # 允许打开外部链接
             
+            self.labelDevHistory.setText(DevDataFetcher.format_dev_history(history_data))
+            
+            # 按市值排序
             sorted_history = sorted(history_data, 
                                   key=lambda x: (x.get('usd_market_cap', 0), x.get('created_timestamp', 0)), 
                                   reverse=True)
@@ -703,11 +761,13 @@ class MainWindow(QMainWindow):
 
     def on_trade_data_received(self, trade_data, creator):
         """处理交易数据"""
-        if trade_data and 'transactions' in trade_data:
-            self.add_log("获取交易记录成功", f"交易数: {len(trade_data['transactions'])}")
+        if trade_data:
+            self.labelDevTrade.setText(f"交易信息（{DevDataFetcher.format_dev_trade_status(trade_data)}）")
             
-            trade_model = DevTradeTableModel(trade_data['transactions'], creator)
-            self.tableDevTrade.setModel(trade_model)
+            if 'transactions' in trade_data:
+                self.add_log("获取交易记录成功", f"交易数: {len(trade_data['transactions'])}")
+                trade_model = DevTradeTableModel(trade_data['transactions'], creator)
+                self.tableDevTrade.setModel(trade_model)
 
     def on_api_error(self, error_msg):
         """处理API错误"""
