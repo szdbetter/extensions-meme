@@ -5,19 +5,183 @@ Solana代币信息查询工具
 描述: 该工具用于查询Solana链上代币信息，支持图片显示和基本信息展示
 """
 
-from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton, QLineEdit, QTextEdit, QLabel
+from PySide6.QtWidgets import (QApplication, QMainWindow, QPushButton, QLineEdit, 
+                             QTextEdit, QLabel, QTableView)
 from PySide6.QtUiTools import QUiLoader
-from PySide6.QtCore import Qt, QCoreApplication
+from PySide6.QtCore import Qt, QCoreApplication, QAbstractTableModel, QModelIndex
 from PySide6.QtGui import QPixmap
 import sys
 import os
 import requests
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import json
+import base64
 
 # 设置Qt属性
 QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
+
+class DevHistoryTableModel(QAbstractTableModel):
+    """开发者历史发币表格模型"""
+    
+    def __init__(self, data: List[Dict[str, Any]], parent=None):
+        super().__init__(parent)
+        self._data = data
+        self._headers = ["发币", "成功", "市值", "时间"]
+
+    def rowCount(self, parent=QModelIndex()) -> int:
+        return len(self._data)
+
+    def columnCount(self, parent=QModelIndex()) -> int:
+        return len(self._headers)
+
+    def data(self, index: QModelIndex, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+        
+        if role == Qt.DisplayRole:
+            row_data = self._data[index.row()]
+            col = index.column()
+            
+            if col == 0:
+                return row_data.get('symbol', '')
+            elif col == 1:
+                return "是" if row_data.get('complete', False) else "否"
+            elif col == 2:
+                market_cap = row_data.get('usd_market_cap', 0)
+                return self.format_market_cap(market_cap)
+            elif col == 3:
+                timestamp = row_data.get('created_timestamp', 0)
+                return TimeUtil.get_time_diff(timestamp)
+        
+        return None
+
+    def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.DisplayRole):
+        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+            return self._headers[section]
+        return None
+
+    @staticmethod
+    def format_market_cap(value: float) -> str:
+        """格式化市值显示"""
+        if value >= 1000000:
+            return f"{value/1000000:.1f}M"
+        elif value >= 1000:
+            return f"{value/1000:.1f}K"
+        return f"{value:.1f}"
+
+class DevTradeTableModel(QAbstractTableModel):
+    """开发者交易记录表格模型"""
+    
+    def __init__(self, data: List[Dict[str, Any]], parent=None):
+        super().__init__(parent)
+        self._data = data
+        self._headers = ["操作", "From", "To", "金额", "数量", "时间"]
+
+    def rowCount(self, parent=QModelIndex()) -> int:
+        return len(self._data)
+
+    def columnCount(self, parent=QModelIndex()) -> int:
+        return len(self._headers)
+
+    def data(self, index: QModelIndex, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+        
+        if role == Qt.DisplayRole:
+            row_data = self._data[index.row()]
+            col = index.column()
+            
+            if col == 0:
+                op_map = {
+                    "buy": "买入",
+                    "sell": "卖出",
+                    "trans_in": "转入",
+                    "trans_out": "转出"
+                }
+                return op_map.get(row_data.get('op', ''), '')
+            elif col == 1:
+                return self.format_address(row_data.get('from', ''))
+            elif col == 2:
+                return self.format_address(row_data.get('to', ''))
+            elif col == 3:
+                op = row_data.get('op', '')
+                if op in ['trans_in', 'trans_out']:
+                    return ''
+                return str(row_data.get('volume', ''))
+            elif col == 4:
+                return str(row_data.get('amount', ''))
+            elif col == 5:
+                timestamp = row_data.get('time', 0)
+                return TimeUtil.get_time_diff(timestamp * 1000)  # 转换为毫秒
+        
+        return None
+
+    def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.DisplayRole):
+        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+            return self._headers[section]
+        return None
+
+    @staticmethod
+    def format_address(address: str) -> str:
+        """格式化地址显示"""
+        if len(address) <= 6:
+            return address
+        return f"{address[:3]}...{address[-3:]}"
+
+class DevDataFetcher:
+    """开发者数据获取类"""
+    
+    @staticmethod
+    def fetch_dev_history(creator: str) -> Optional[List[Dict[str, Any]]]:
+        """获取开发者历史发币记录"""
+        url = f"https://frontend-api-v3.pump.fun/coins/user-created-coins/{creator}"
+        params = {
+            "offset": 0,
+            "limit": 10,
+            "includeNsfw": False
+        }
+        
+        try:
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"获取开发者历史记录失败: {e}")
+            return None
+
+    @staticmethod
+    def fetch_dev_trades(contract: str) -> Optional[Dict[str, Any]]:
+        """获取开发者交易记录"""
+        url = f"https://debot.ai/api/dashboard/token/dev/info"
+        params = {
+            "chain": "solana",
+            "token": contract
+        }
+        
+        try:
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            return response.json().get('data', {})
+        except Exception as e:
+            print(f"获取开发者交易记录失败: {e}")
+            return None
+
+    @staticmethod
+    def format_dev_info(history_data: List[Dict[str, Any]]) -> str:
+        """格式化开发者信息"""
+        if not history_data:
+            return "未找到开发者信息"
+            
+        creator = history_data[0].get('creator', '')
+        total_coins = len(history_data)
+        success_coins = sum(1 for coin in history_data if coin.get('complete', False))
+        max_market_cap = max((coin.get('usd_market_cap', 0) for coin in history_data), default=0)
+        
+        formatted_creator = f"{creator[:3]}...{creator[-3:]}" if len(creator) > 6 else creator
+        formatted_market_cap = DevHistoryTableModel.format_market_cap(max_market_cap)
+        
+        return f"Dev信息（地址：{formatted_creator}，历史创建：{total_coins}次，成功{success_coins}次，最高市值：{formatted_market_cap}）"
 
 class CoinDataFetcher:
     """代币数据获取类"""
@@ -59,6 +223,26 @@ class CoinDataFetcher:
 
 class ImageHandler:
     """图片处理类"""
+
+    @staticmethod
+    def get_image_base64(image_url: str) -> str:
+        """
+        获取图片的base64编码
+
+        Args:
+            image_url: 图片URL
+
+        Returns:
+            str: base64编码的图片数据
+        """
+        try:
+            response = requests.get(image_url)
+            response.raise_for_status()
+            image_data = base64.b64encode(response.content).decode('utf-8')
+            return f"data:image/png;base64,{image_data}"
+        except Exception as e:
+            print(f"图片处理错误: {e}")
+            return ""
 
     @staticmethod
     def download_and_display_image(image_url: str, label: QLabel) -> bool:
@@ -164,9 +348,12 @@ class MainWindow(QMainWindow):
         self.btnQuery = self.ui.findChild(QPushButton, 'btnQuery')
         self.leCA = self.ui.findChild(QLineEdit, 'leCA')
         self.txtCoinInfo = self.ui.findChild(QTextEdit, 'txtCoinInfo')
-        self.labelCoinPic = self.ui.findChild(QLabel, 'labelCoinPic')
+        self.labelDevInfo = self.ui.findChild(QLabel, 'labelDevInfo')
+        self.tableDevHistory = self.ui.findChild(QTableView, 'tableDevHistory')
+        self.tableDevTrade = self.ui.findChild(QTableView, 'tableDevTrade')
 
-        if not all([self.btnQuery, self.leCA, self.txtCoinInfo, self.labelCoinPic]):
+        if not all([self.btnQuery, self.leCA, self.txtCoinInfo, 
+                   self.labelDevInfo, self.tableDevHistory, self.tableDevTrade]):
             self.show_error_and_exit("错误: 无法找到所有必需的UI控件")
 
         # 设置默认CA地址
@@ -195,6 +382,9 @@ class MainWindow(QMainWindow):
         website = coin_data.get('website', '')
         contract = coin_data.get('mint', '')
 
+        # 获取base64编码的图片
+        image_data = ImageHandler.get_image_base64(image_uri) if image_uri else ''
+
         # 使用HTML格式化信息
         html = f"""
         <html>
@@ -203,6 +393,7 @@ class MainWindow(QMainWindow):
             .container {{
                 font-family: Arial, sans-serif;
                 padding: 10px;
+                max-width: 800px;
             }}
             .header {{
                 display: flex;
@@ -211,32 +402,41 @@ class MainWindow(QMainWindow):
                 margin-bottom: 20px;
             }}
             .coin-image {{
-                width: 80px;
-                height: 80px;
-                object-fit: contain;
-            }}
-            .title {{
-                font-size: 16px;
-                margin-bottom: 5px;
+                width: 32px;
+                height: 32px;
+                object-fit: cover;
+                border-radius: 4px;
+                flex-shrink: 0;
+                vertical-align: middle;
+                margin-top: 4px;
             }}
             .info {{
                 flex: 1;
+                min-width: 0;
+            }}
+            .title {{
+                font-size: 16px;
+                margin-bottom: 8px;
+                color: #333;
             }}
             .description {{
-                margin-top: 10px;
-                line-height: 1.4;
+                font-size: 14px;
+                line-height: 1.5;
+                color: #666;
             }}
             .buttons {{
                 margin-top: 15px;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
             }}
             .button {{
                 display: inline-block;
-                padding: 5px 10px;
+                padding: 5px 12px;
                 background-color: #3498db;
                 color: white;
                 text-decoration: none;
-                border-radius: 3px;
-                margin-right: 10px;
+                border-radius: 4px;
                 font-size: 12px;
             }}
         </style>
@@ -244,7 +444,7 @@ class MainWindow(QMainWindow):
         <body>
         <div class='container'>
             <div class='header'>
-                <img src='{image_uri}' class='coin-image' onerror="this.src='default.png'"/>
+                <img src='{image_data}' class='coin-image' onerror="this.style.display='none'"/>
                 <div class='info'>
                     <div class='title'>代币名称：{name} ({symbol})，{created_time}</div>
                     <div class='description'>
@@ -265,6 +465,36 @@ class MainWindow(QMainWindow):
         </html>
         """
         return html
+
+    def update_dev_info(self, coin_data: Dict[str, Any]):
+        """更新开发者信息"""
+        creator = coin_data.get('creator')
+        if not creator:
+            return
+
+        # 获取开发者历史记录
+        history_data = DevDataFetcher.fetch_dev_history(creator)
+        if history_data:
+            # 更新开发者信息标签
+            self.labelDevInfo.setText(DevDataFetcher.format_dev_info(history_data))
+            
+            # 按市值排序
+            sorted_history = sorted(history_data, 
+                                  key=lambda x: (x.get('usd_market_cap', 0), x.get('created_timestamp', 0)), 
+                                  reverse=True)
+            
+            # 更新历史表格
+            history_model = DevHistoryTableModel(sorted_history)
+            self.tableDevHistory.setModel(history_model)
+            self.tableDevHistory.resizeColumnsToContents()
+
+        # 获取开发者交易记录
+        trade_data = DevDataFetcher.fetch_dev_trades(coin_data.get('mint', ''))
+        if trade_data and 'transactions' in trade_data:
+            # 更新交易表格
+            trade_model = DevTradeTableModel(trade_data['transactions'])
+            self.tableDevTrade.setModel(trade_model)
+            self.tableDevTrade.resizeColumnsToContents()
 
     def query_coin_info(self):
         """查询代币信息"""
@@ -299,6 +529,9 @@ class MainWindow(QMainWindow):
             # 显示代币信息
             self.txtCoinInfo.setHtml(self.format_coin_info(coin_data))
             self.txtCoinInfo.setOpenExternalLinks(True)  # 允许打开外部链接
+            
+            # 更新开发者信息
+            self.update_dev_info(coin_data)
         else:
             error_html = """
             <html>
