@@ -9,10 +9,11 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QPushButton, QLineEdit
                              QTextEdit, QLabel, QTableView, QStyledItemDelegate, QStyle, QHeaderView,
                              QListView, QStyleOptionViewItem)
 from PySide6.QtUiTools import QUiLoader
-from PySide6.QtCore import Qt, QCoreApplication, QAbstractTableModel, QModelIndex, QThread, Signal, QDateTime, QSize
+from PySide6.QtCore import (Qt, QCoreApplication, QAbstractTableModel, QModelIndex, QThread, Signal,
+                         QDateTime, QSize, QUrl, QAbstractListModel)
 from PySide6.QtGui import (QPixmap, QColor, QBrush, QFont, QPalette,
                           QStandardItemModel, QStandardItem, QTextDocument,
-                          QAbstractTextDocumentLayout)
+                          QAbstractTextDocumentLayout, QDesktopServices)
 from qt_material import apply_stylesheet
 import sys
 import os
@@ -491,6 +492,316 @@ class HTMLDelegate(QStyledItemDelegate):
         doc.setHtml(options.text)
         return QSize(doc.idealWidth(), doc.size().height())
 
+class TweetModel(QAbstractListModel):
+    """推文数据模型"""
+    def __init__(self, tweets=None):
+        super().__init__()
+        self._tweets = tweets or []
+        print(f"TweetModel initialized with {len(self._tweets)} tweets")  # 调试信息
+
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid() or not (0 <= index.row() < len(self._tweets)):
+            return None
+            
+        tweet = self._tweets[index.row()]
+        
+        if role == Qt.DisplayRole:
+            return tweet
+        elif role == Qt.UserRole:
+            return tweet
+            
+        return None
+            
+    def rowCount(self, parent=QModelIndex()):
+        count = len(self._tweets)
+        print(f"rowCount called, returning {count}")  # 调试信息
+        return count
+
+    def addTweets(self, tweets):
+        if not tweets:
+            print("Warning: Attempting to add empty tweets list")  # 调试信息
+            return
+            
+        print(f"Adding {len(tweets)} tweets to model")  # 调试信息
+        self.beginInsertRows(QModelIndex(), 0, len(tweets)-1)
+        self._tweets = tweets
+        self.endInsertRows()
+        print(f"Model now has {len(self._tweets)} tweets")  # 调试信息
+
+class TweetItemDelegate(QStyledItemDelegate):
+    """推文项代理"""
+    def paint(self, painter, option, index):
+        if not index.isValid():
+            return
+            
+        try:
+            tweet = index.data(Qt.UserRole)
+            if not tweet:
+                return
+                
+            # 设置背景
+            if option.state & QStyle.State_Selected:
+                painter.fillRect(option.rect, option.palette.highlight())
+            elif option.state & QStyle.State_MouseOver:
+                painter.fillRect(option.rect, QColor("#f8f9fa"))
+            else:
+                painter.fillRect(option.rect, QColor("#ffffff"))
+                
+            # 创建文档
+            doc = QTextDocument()
+            
+            # 构建HTML内容
+            html = f"""
+            <div style='margin: 10px;'>
+                <div style='display: flex; align-items: center; margin-bottom: 5px;'>
+                    <img src='{tweet.get("user", {}).get("icon", "")}' width='48' height='48' 
+                         style='border-radius: 24px; margin-right: 10px;'/>
+                    <div>
+                        <div style='font-weight: bold;'>{tweet.get("user", {}).get("name", "")}</div>
+                        <div style='color: #657786;'>@{tweet.get("user", {}).get("screen_name", "")}</div>
+                    </div>
+                </div>
+                <div style='margin-left: 58px;'>
+                    <div style='margin-bottom: 10px; line-height: 1.4;'>{tweet.get("text", "")}</div>
+                    {"<img src='" + tweet["medias"][0]["image_url"] + "' width='100%' style='border-radius: 8px; margin: 5px 0;'/>" 
+                     if tweet.get("medias") and tweet["medias"][0].get("image_url") else ""}
+                    <div style='color: #657786; font-size: 12px; margin-top: 5px;'>
+                        <span style='margin-right: 15px;'>❤️ {tweet.get("favorite_count", 0):,}</span>
+                        <span style='margin-right: 15px;'>🔄 {tweet.get("retweet_count", 0):,}</span>
+                        <span>👁️ {tweet.get("views", 0):,}</span>
+                    </div>
+                </div>
+            </div>
+            """
+            doc.setHtml(html)
+            
+            # 设置文档宽度
+            doc.setTextWidth(option.rect.width())
+            
+            # 绘制内容
+            painter.save()
+            painter.translate(option.rect.topLeft())
+            doc.drawContents(painter)
+            painter.restore()
+            
+        except Exception as e:
+            print(f"Error painting tweet: {str(e)}")
+
+    def sizeHint(self, option, index):
+        try:
+            tweet = index.data(Qt.UserRole)
+            if not tweet:
+                return QSize(0, 0)
+                
+            doc = QTextDocument()
+            html = f"""
+            <div style='margin: 10px;'>
+                <div style='display: flex; align-items: center; margin-bottom: 5px;'>
+                    <img src='{tweet.get("user", {}).get("icon", "")}' width='48' height='48' 
+                         style='border-radius: 24px; margin-right: 10px;'/>
+                    <div>
+                        <div style='font-weight: bold;'>{tweet.get("user", {}).get("name", "")}</div>
+                        <div style='color: #657786;'>@{tweet.get("user", {}).get("screen_name", "")}</div>
+                    </div>
+                </div>
+                <div style='margin-left: 58px;'>
+                    <div style='margin-bottom: 10px; line-height: 1.4;'>{tweet.get("text", "")}</div>
+                    {"<img src='" + tweet["medias"][0]["image_url"] + "' width='100%' style='border-radius: 8px; margin: 5px 0;'/>" 
+                     if tweet.get("medias") and tweet["medias"][0].get("image_url") else ""}
+                    <div style='color: #657786; font-size: 12px; margin-top: 5px;'>
+                        <span style='margin-right: 15px;'>❤️ {tweet.get("favorite_count", 0):,}</span>
+                        <span style='margin-right: 15px;'>🔄 {tweet.get("retweet_count", 0):,}</span>
+                        <span>👁️ {tweet.get("views", 0):,}</span>
+                    </div>
+                </div>
+            </div>
+            """
+            doc.setHtml(html)
+            doc.setTextWidth(option.rect.width())
+            
+            # 计算高度（基础高度 + 图片高度）
+            height = doc.size().height()
+            if tweet.get("medias") and tweet["medias"][0].get("image_url"):
+                height += 200  # 图片固定高度
+                
+            return QSize(option.rect.width(), int(height) + 20)
+            
+        except Exception as e:
+            print(f"Error calculating size hint: {str(e)}")
+            return QSize(option.rect.width(), 100)  # 返回默认大小
+
+class HeadlessBrowser:
+    """无头浏览器工具类，用于处理需要浏览器环境的API请求"""
+    
+    @staticmethod
+    async def login_chain_fm(page):
+        """登录Chain.fm"""
+        try:
+            # 访问登录页面
+            await page.goto('https://chain.fm/login')
+            
+            # 等待登录按钮出现
+            await page.waitForSelector('button[data-provider="google"]')
+            
+            # 点击Google登录按钮
+            await page.click('button[data-provider="google"]')
+            
+            # 等待登录完成，这里需要等待URL变化
+            await page.waitForNavigation()
+            
+            # 检查是否登录成功
+            current_url = page.url
+            if 'chain.fm' in current_url and 'login' not in current_url:
+                print("登录成功")
+                return True
+            else:
+                print("登录失败")
+                return False
+                
+        except Exception as e:
+            print(f"登录过程出错: {str(e)}")
+            return False
+    
+    @staticmethod
+    async def fetch_with_puppeteer(url: str) -> Optional[Dict]:
+        """
+        使用Puppeteer无头浏览器获取API数据
+        
+        Args:
+            url: API地址
+            
+        Returns:
+            Optional[Dict]: API返回的数据或None（如果获取失败）
+        """
+        try:
+            import asyncio
+            from pyppeteer import launch
+            
+            # 启动浏览器，这里设置为非无头模式以便调试
+            browser = await launch(
+                headless=False,  # 设置为False以便查看浏览器操作
+                args=['--no-sandbox', '--disable-setuid-sandbox']
+            )
+            
+            # 创建新页面
+            page = await browser.newPage()
+            
+            # 设置页面视口
+            await page.setViewport({'width': 1920, 'height': 1080})
+            
+            # 设置用户代理
+            await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36')
+            
+            # 先进行登录
+            login_success = await HeadlessBrowser.login_chain_fm(page)
+            if not login_success:
+                await browser.close()
+                return None
+            
+            # 访问API URL
+            response = await page.goto(url)
+            
+            # 等待页面加载完成
+            await page.waitForSelector('body')
+            
+            # 获取响应内容
+            content = await response.json()
+            
+            # 关闭浏览器
+            await browser.close()
+            
+            return content
+            
+        except Exception as e:
+            print(f"Puppeteer请求失败: {str(e)}")
+            return None
+            
+    @staticmethod
+    def fetch_api_data(url: str) -> Optional[Dict]:
+        """
+        同步方式调用Puppeteer获取API数据
+        
+        Args:
+            url: API地址
+            
+        Returns:
+            Optional[Dict]: API返回的数据或None（如果获取失败）
+        """
+        try:
+            import asyncio
+            if sys.platform == 'win32':
+                asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+            
+            loop = asyncio.get_event_loop()
+            return loop.run_until_complete(HeadlessBrowser.fetch_with_puppeteer(url))
+            
+        except Exception as e:
+            print(f"获取API数据失败: {str(e)}")
+            return None
+
+class NodeService:
+    """Node.js服务交互类"""
+    
+    BASE_URL = "http://localhost:3000"
+    
+    @staticmethod
+    def fetch_chain_fm_data(contract_address: str) -> Optional[Dict]:
+        """
+        从本地Node.js服务获取Chain.fm数据
+        
+        Args:
+            contract_address: 代币合约地址
+            
+        Returns:
+            Optional[Dict]: API返回的数据或None（如果获取失败）
+        """
+        try:
+            url = "https://chain.fm/api/trpc/parsedTransaction.list"
+            
+            # 构建batch请求格式
+            batch_input = {
+                "0": {
+                    "json": {
+                        "page": 1,
+                        "pageSize": 30,
+                        "dateRange": None,
+                        "token": contract_address,
+                        "address": [],
+                        "useFollowing": True,
+                        "includeChannels": [],
+                        "lastUpdateTime": None,
+                        "events": []
+                    },
+                    "meta": {
+                        "values": {
+                            "dateRange": ["undefined"],
+                            "lastUpdateTime": ["undefined"]
+                        }
+                    }
+                }
+            }
+            
+            # 构建完整的URL
+            full_url = f"{url}?batch=1&input={json.dumps(batch_input)}"
+            
+            response = requests.post(NodeService.BASE_URL, json={
+                "url": full_url,
+                "dataType": "chain_fm_transactions"
+            })
+            
+            response.raise_for_status()
+            result = response.json()
+            
+            if result.get('success'):
+                return result.get('response', {}).get('data', [])
+            else:
+                print(f"获取数据失败: {result.get('error')}")
+                return None
+                
+        except Exception as e:
+            print(f"从Node.js服务获取数据失败: {str(e)}")
+            return None
+
 class MainWindow(QMainWindow):
     """主窗口类"""
 
@@ -543,7 +854,14 @@ class MainWindow(QMainWindow):
             'listViewLog': (QListView, '日志列表'),
             'labelCoinPic': (QLabel, '代币图片'),
             'labelCoinSymbol': (QLabel, '代币名称'),
-            'labelCoinDescription': (QLabel, '代币描述')
+            'labelCoinDescription': (QLabel, '代币描述'),
+            'labelFilterTweets': (QLabel, '推文数标签'),
+            'labelFollowers': (QLabel, '关注者标签'),
+            'labelLikes': (QLabel, '点赞标签'),
+            'labelViews': (QLabel, '浏览标签'),
+            'labelOfficalTweets': (QLabel, '官方推文标签'),
+            'labelSmartBuy': (QLabel, '智能买入标签'),
+            'listViewSocial': (QListView, '推文列表'),
         }
 
         # 检查每个控件
@@ -854,6 +1172,25 @@ class MainWindow(QMainWindow):
             # 更新代币相关标签
             self.update_coin_labels(coin_data)
 
+            # 获取社交媒体信息
+            contract = coin_data.get('mint', '')
+            if contract:
+                # 获取社交统计信息
+                url = f"https://www.pump.news/api/trpc/analyze.getBatchTokenDataByTokenAddress,watchlist.batchTokenWatchState?batch=1&input=%7B%220%22%3A%7B%22json%22%3A%7B%22tokenAddresses%22%3A%5B%22{contract}%22%5D%7D%7D%2C%221%22%3A%7B%22json%22%3A%7B%22tokenAddresses%22%3A%5B%22{contract}%22%5D%7D%7D%7D"
+                
+                self.social_worker = ApiWorker(requests.get, url)
+                self.social_worker.finished.connect(lambda response: self.update_social_info(response.json()))
+                self.social_worker.error.connect(self.on_api_error)
+                self.social_worker.start()
+                
+                # 获取推文列表
+                tweets_url = f"https://www.pump.news/api/trpc/utils.getCannyList,service.getServiceCallCount,tweets.getTweetsByTokenAddress?batch=1&input=%7B%220%22%3A%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D%2C%221%22%3A%7B%22json%22%3A%7B%22service%22%3A%22optimize%22%7D%7D%2C%222%22%3A%7B%22json%22%3A%7B%22tokenAddress%22%3A%22{contract}%22%2C%22type%22%3A%22filter%22%2C%22category%22%3A%22top%22%7D%7D%7D"
+                
+                self.tweets_worker = ApiWorker(requests.get, tweets_url)
+                self.tweets_worker.finished.connect(lambda response: self.update_tweets(response.json()))
+                self.tweets_worker.error.connect(self.on_api_error)
+                self.tweets_worker.start()
+
             # 异步获取开发者信息
             creator = coin_data.get('creator')
             if creator:
@@ -912,47 +1249,21 @@ class MainWindow(QMainWindow):
             # 开始获取聪明钱数据
             self.add_log("请求聪明钱信息", "正在获取...", "https://chain.fm")
             contract_address = self.leCA.text().strip()
-            url = f"https://chain.fm/api/trpc/parsedTransaction.list?batch=1&input=%7B%220%22%3A%7B%22json%22%3A%7B%22page%22%3A1%2C%22pageSize%22%3A30%2C%22dateRange%22%3Anull%2C%22token%22%3A%22{contract_address}%22%2C%22address%22%3A%5B%5D%2C%22useFollowing%22%3Atrue%2C%22includeChannels%22%3A%5B%5D%2C%22lastUpdateTime%22%3Anull%2C%22events%22%3A%5B%5D%7D%2C%22meta%22%3A%7B%22values%22%3A%7B%22dateRange%22%3A%5B%22undefined%22%5D%2C%22lastUpdateTime%22%3A%5B%22undefined%22%5D%7D%7D%7D%7D"
-
-            headers = {
-                'authority': 'chain.fm',
-                'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                'accept-encoding': 'gzip, deflate, br',
-                'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
-                'cache-control': 'no-cache',
-                'cookie': 'route=1738813419.686.1787.931072|ac6ee60b9fd4a51dc3f821303d84ab66; _ga=GA1.1.2014152572.1732520470; route=1738839856.63.1787.731604|6a2e0fae734350807e35f906d2bb5b55; sb-uevkefaiiblqfucfgfja-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdjaU9pSklVekkxTmlJc0ltdHBaQ0k2SW1veWRsTXhNMndyUzIxeVdURnVabWdpTENKMGVYQWlPaUpLVjFRaWZRLmV5SnBjM01pT2lKb2RIUndjem92TDNWbGRtdGxabUZwYVdKc2NXWjFZMlpuWm1waExuTjFjR0ZpWVhObExtTnZMMkYxZEdndmRqRWlMQ0p6ZFdJaU9pSm1NRGczWmpKaU5TMWtNV0k0TFRRMVpHRXRZak16WXkwM01EY3dNR1F6WVROallXSWlMQ0poZFdRaU9pSmhkWFJvWlc1MGFXTmhkR1ZrSWl3aVpYaHdJam94TnpNNE9UQXhOelU0TENKcFlYUWlPakUzTXpnNE9UUTFOakFzSW1WdFlXbHNJam9pT0RBME5ETTNNa0JuYldGcGJDNWpiMjBpTENKd2FHOXVaU0k2SWlJc0ltRndjRjl0WlhSaFpHRjBZU0k2ZXlKd2NtOTJhV1JsY2lJNkltVnRZV2xzSWl3aWNISnZkbWxrWlhKeklqcGJJbVZ0WVdsc0lsMTlMQ0oxYzJWeVgyMWxkR0ZrWVhSaElqcDdJbVZ0WVdsc0lqb2lPREEwTkRNM01rQm5iV0ZwYkM1amIyMGlMQ0psYldGcGJGOTJaWEpwWm1sbFpDSTZabUZzYzJVc0luQm9iMjVsWDNabGNtbG1hV1ZrSWpwbVlXeHpaU3dpYzNWaUlqb2laakE0TjJZeVlqVXRaREZpT0MwME5XUmhMV0l6TTJNdE56QTNNREJrTTJFelkyRmlJbjBzSW5KdmJHVWlPaUpoZFhSb1pXNTBhV05oZEdWa0lpd2lZV0ZzSWpvaVlXRnNNU0lzSW1GdGNpSTZXM3NpYldWMGFHOWtJam9pY0dGemMzZHZjbVFpTENKMGFXMWxjM1JoYlhBaU9qRTNNemMyTXpRd056RjlYU3dpYzJWemMybHZibDlwWkNJNklqTTRZVEJoTVRrM0xXSXdPVFV0TkRjMFpDMWhOamMwTFdJNU4yUmpPRGt5WWpRMFl5SXNJbWx6WDJGdWIyNTViVzkxY3lJNlptRnNjMlY5LmpBUVN1VmYwaTBsc1IyWndXSE9LM00zZWtKREJiVTQ2TkVDZ0swNVFNUnMiLCJ0b2tlbl90eXBlIjoiYmVhcmVyIiwiZXhwaXJlc19pbiI6NzE5OCwiZXhwaXJlc19hdCI6MTczODkwMTc1OCwicmVmcmVzaF90b2tlbiI6ImhuOEdCNGNhWnZfT0Ezc1BnZlBEU0EiLCJ1c2VyIjp7ImlkIjoiZjA4N2YyYjUtZDFiOC00NWRhLWIzM2MtNzA3MDBkM2EzY2FiIiwiYXVkIjoiYXV0aGVudGljYXRlZCIsInJvbGUiOiJhdXRoZW50aWNhdGVkIiwiZW1haWwiOiI4MDQ0MzcyQGdtYWlsLmNvbSIsImVtYWlsX2NvbmZpcm1lZF9hdCI6IjIwMjQtMTEtMjZUMDc6MzE6MDguMzA4MzExWiIsInBob25lIjoiIiwiY29uZmlybWF0aW9uX3NlbnRfYXQiOiIyMDI0LTExLTI2VDA3OjMwOjQ1LjI4MjkyN1oiLCJjb25maXJtZWRfYXQiOiIyMDI0LTExLTI2VDA3OjMxOjA4LjMwODMxMVoiLCJsYXN0X3NpZ25faW5fYXQiOiIyMDI1LTAxLTI2VDAzOjQ2OjIxLjc4MjgzN1oiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdfSwidXNlcl9tZXRhZGF0YSI6eyJlbWFpbCI6IjgwNDQzNzJAZ21haWwuY29tIiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJwaG9uZV92ZXJpZmllZCI6ZmFsc2UsInN1YiI6ImYwODdmMmI1LWQxYjgtNDVkYS1iMzNjLTcwNzAwZDNhM2NhYiJ9LCJpZGVudGl0aWVzIjpbeyJpZGVudGl0eV9pZCI6ImY1ZDJmMDkzLWM1ODEtNDdjOC1hM2MzLTY5ZTdkNTFmZjM4OCIsImlkIjoiZjA4N2YyYjUtZDFiOC00NWRhLWIzM2MtNzA3MDBkM2EzY2FiIiwidXNlcl9pZCI6ImYwODdmMmI1LWQxYjgtNDVkYS1iMzNjLTcwNzAwZDNhM2NhYiIsImlkZW50aXR5X2RhdGEiOnsiZW1haWwiOiI4MDQ0MzcyQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwicGhvbmVfdmVyaWZpZWQiOmZhbHNlLCJzdWIiOiJmMDg3ZjJiNS1kMWI4LTQ1ZGEtYjMzYy03MDcwMGQzYTNjYWIifSwicHJvdmlkZXIiOiJlbWFpbCIsImxhc3Rfc2lnbl9pbl9hdCI6IjIwMjQtMTEtMjZUMDc6MzA6NDUuMjczODI2WiIsImNyZWF0ZWRfYXQiOiIyMDI0LTExLTI2VDA3OjMwOjQ1LjI3Mzg4M1oiLCJ1cGRhdGVkX2F0IjoiMjAyNC0xMS0yNlQwNzozMDo0NS4yNzM4ODNaIiwiZW1haWwiOiI4MDQ0MzcyQGdtYWlsLmNvbSJ9XSwiY3JlYXRlZF9hdCI6IjIwMjQtMTEtMjZUMDc6MzA6NDUuMjY4NjQ3WiIsInVwZGF0ZWRfYXQiOiIyMDI1LTAyLTA3VDAyOjE2OjAwLjUzNDIxN1oiLCJpc19hbm9ueW1vdXMiOmZhbHNlfX0; _ga_0HSK82V0LJ=GS1.1.1738896431.49.1.1738897339.0.0.0; cf_clearance=H1zQN7IuBM_zG9WJshgBrwdjp8D.l0INSv0wWsYTalI-1738897339-1.2.1.1-EFKasLkR_RWvf1Je6NZragCGZtHDyUtbocUgLbWFieBk5P3iu6.p7bOCLSHCFNJPFp028fpQ0168zvXMTINZUaNlGa09dj9NPVMIyk6TW2M5RAVnWqqI4Ym_52Rx7j_UBrY_m.UZ8hZmau_0Ki_iDVYqO9GaNVp7iSIz3Iz5HgOr6sN1Ryl9o2VDQ7_X._ibPH1zFUMLUfv6bGIO3kjq6nDeAQKGyoSSGrlVx5LL9H2fMBXrqPK8KI5mWDUt.VWBsKErJezR5Yi3eMJLVa7fpNDpDjsO4RBwy9X8mNiecrk',
-                'pragma': 'no-cache',
-                'sec-ch-ua': '"Not A(Brand";v="8", "Chromium";v="132", "Google Chrome";v="132"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"macOS"',
-                'sec-fetch-dest': 'document',
-                'sec-fetch-mode': 'navigate',
-                'sec-fetch-site': 'none',
-                'sec-fetch-user': '?1',
-                'upgrade-insecure-requests': '1',
-                'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
-            }
 
             try:
-                response = requests.get(url, headers=headers)
+                # 使用Node.js服务获取数据
+                data = NodeService.fetch_chain_fm_data(contract_address)
+                
+                if data and len(data) > 0:
+                    result = data[0].get('result', {})
+                    transactions = result.get('data', {}).get('json', {}).get('data', {}).get('parsedTransactions', [])
+                    address_labels = result['data']['json']['data']['renderContext']['addressLabelsMap']
 
-                if response.status_code == 401:
-                    self.add_log("获取聪明钱数据", "失败 - 需要登录Chain.fm", "https://chain.fm")
-                    self.show_error_message("获取聪明钱数据失败：请手动访问Chain.fm一次再运行API")
+                    self.add_log("获取聪明钱数据", f"成功 - 获取到{len(transactions)}条交易记录，{len(address_labels)}个地址标签")
+                    self.update_smart_money_info(transactions, address_labels)
                 else:
-                    response.raise_for_status()
-                    data = response.json()
-
-                    if data and len(data) > 0:
-                        result = data[0].get('result', {})
-                        transactions = result.get('data', {}).get('json', {}).get('data', {}).get('parsedTransactions', [])
-                        #address_labels = result.get('data', {}).get('json', {}).get('renderContext', {}).get('addressLabelsMap', {})
-                        address_labels = result['data']['json']['data']['renderContext']['addressLabelsMap']
-
-                        self.add_log("获取聪明钱数据", f"成功 - 获取到{len(transactions)}条交易记录，{len(address_labels)}个地址标签")
-                        self.update_smart_money_info(transactions, address_labels)
-                    else:
-                        self.add_log("获取聪明钱数据", "失败 - 返回数据为空")
+                    self.add_log("获取聪明钱数据", "失败 - 返回数据为空")
+                    
             except Exception as e:
                 self.add_log("获取聪明钱数据", f"错误 - {str(e)}")
                 self.show_error_message(f"获取聪明钱数据失败：{str(e)}")
@@ -1140,6 +1451,102 @@ class MainWindow(QMainWindow):
         """
         self.labelSmartMoneyInfo.setText(info_html)
         self.add_log("聪明钱信息更新完成")
+
+    def update_social_info(self, data):
+        """更新社交信息"""
+        try:
+            # 更新统计数据
+            stats = data[0]["result"]["data"]["json"]["data"]["data"][0]["stats"]
+            self.labelFilterTweets.setText(f"推文数：{stats['filter_tweets']}")
+            self.labelFollowers.setText(f"关注者：{stats['followers']:,}")
+            self.labelLikes.setText(f"点赞：{stats['likes']:,}")
+            self.labelViews.setText(f"浏览：{stats['views']:,}")
+            self.labelOfficalTweets.setText(f"官方推文：{stats['official_tweets']}")
+            self.labelSmartBuy.setText(f"智能买入：{data[0]['result']['data']['json']['data']['data'][0]['smartbuy']}")
+            
+            # 更新描述
+            summary = data[0]["result"]["data"]["json"]["data"]["data"][0]["analysis"]["lang-zh-CN"]["summary"]
+            self.labelCoinDescription.setText(summary)
+            
+        except Exception as e:
+            self.add_log("更新社交统计信息", f"错误 - {str(e)}")
+
+    def update_tweets(self, tweets_data):
+        """更新推文列表"""
+        try:
+            # 检查tweets_data是否有效
+            if not tweets_data or not isinstance(tweets_data, list) or len(tweets_data) < 3:
+                self.add_log("更新推文列表", f"错误 - 无效的推文数据格式")
+                return
+
+            # 获取推文数据 - 修改数据访问路径
+            tweets = tweets_data[2]["result"]["data"]["json"]["data"]["data"]["tweets"]
+            if not tweets:
+                self.add_log("更新推文列表", "警告 - 没有找到推文数据")
+                return
+            self.add_log("推文列表", f"成功获取 {len(tweets)} 条推文")
+
+            # 设置代理和模型
+            try:
+                if not hasattr(self, 'tweet_model'):
+                    self.tweet_model = TweetModel()
+                    self.listViewSocial.setModel(self.tweet_model)
+                    self.listViewSocial.setItemDelegate(TweetItemDelegate())
+                    self.listViewSocial.clicked.connect(self.on_tweet_clicked)
+                    self.add_log("推文列表", "初始化模型和代理成功")
+            except Exception as model_error:
+                self.add_log("更新推文列表", f"错误 - 设置模型和代理失败: {str(model_error)}")
+                return
+
+            # 更新模型数据
+            try:
+                self.tweet_model.addTweets(tweets)
+                self.add_log("推文列表", "成功更新推文数据到模型")
+            except Exception as update_error:
+                self.add_log("更新推文列表", f"错误 - 更新模型数据失败: {str(update_error)}")
+                return
+
+            # 设置样式
+            try:
+                self.listViewSocial.setStyleSheet("""
+                    QListView {
+                        background-color: white;
+                        border: 1px solid #dcdcdc;
+                        border-radius: 4px;
+                        padding: 5px;
+                    }
+                    QListView::item {
+                        border-bottom: 1px solid #f0f0f0;
+                        padding: 5px;
+                        margin: 2px 0;
+                    }
+                    QListView::item:hover {
+                        background-color: #f8f9fa;
+                    }
+                    QListView::item:selected {
+                        background-color: #e3f2fd;
+                        color: black;
+                    }
+                """)
+                self.add_log("推文列表", "成功设置样式")
+            except Exception as style_error:
+                self.add_log("更新推文列表", f"错误 - 设置样式失败: {str(style_error)}")
+                return
+
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            self.add_log("更新推文列表", f"错误 - {str(e)}\n{error_details}")
+
+    def on_tweet_clicked(self, index):
+        """处理推文点击事件"""
+        tweet = index.data(Qt.UserRole)
+        if tweet:
+            tweet_id = tweet.get("tweet_id")
+            user_screen_name = tweet.get("user", {}).get("screen_name")
+            if tweet_id and user_screen_name:
+                url = f"https://twitter.com/{user_screen_name}/status/{tweet_id}"
+                QDesktopServices.openUrl(QUrl(url))
 
     @staticmethod
     def show_error_and_exit(message: str):
