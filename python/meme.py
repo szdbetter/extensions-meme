@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QPushButton, QLineEdit
                              QListView, QStyleOptionViewItem)
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtCore import (Qt, QCoreApplication, QAbstractTableModel, QModelIndex, QThread, Signal,
-                         QDateTime, QSize, QUrl, QAbstractListModel)
+                         QDateTime, QSize, QUrl, QAbstractListModel, QEvent, QRect)
 from PySide6.QtGui import (QPixmap, QColor, QBrush, QFont, QPalette,
                           QStandardItemModel, QStandardItem, QTextDocument,
                           QAbstractTextDocumentLayout, QDesktopServices)
@@ -530,6 +530,35 @@ class TweetModel(QAbstractListModel):
 
 class TweetItemDelegate(QStyledItemDelegate):
     """推文项代理"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.last_clicked_link = None
+
+    def editorEvent(self, event, model, option, index):
+        """处理鼠标事件"""
+        if event.type() == QEvent.MouseButtonRelease:
+            tweet = index.data(Qt.UserRole)
+            if not tweet:
+                return False
+
+            # 获取点击位置
+            pos = event.pos()
+            
+            # 计算链接图标的位置（右上角）
+            link_rect = QRect(option.rect.right() - 20, option.rect.top() + 10, 15, 15)
+            
+            # 检查是否点击了链接图标
+            if link_rect.contains(pos):
+                tweet_id = tweet.get("tweet_id", "")
+                user_screen_name = tweet.get("user", {}).get("screen_name", "")
+                if tweet_id and user_screen_name:
+                    url = QUrl(f"https://twitter.com/{user_screen_name}/status/{tweet_id}")
+                    QDesktopServices.openUrl(url)
+                    return True
+                    
+        return False  # 不再调用父类方法，禁止其他区域的点击事件
+
     def paint(self, painter, option, index):
         if not index.isValid():
             return
@@ -550,27 +579,41 @@ class TweetItemDelegate(QStyledItemDelegate):
             # 创建文档
             doc = QTextDocument()
             
+            # 获取发推时间
+            created_at = tweet.get("created_at", "0")
+            try:
+                timestamp = int(float(created_at)) * 1000
+                time_diff = TimeUtil.get_time_diff(timestamp)
+            except:
+                time_diff = ""
+            
             # 构建HTML内容
             html = f"""
-            <div style='margin: 10px;'>
-                <div style='display: flex; align-items: center; margin-bottom: 5px;'>
-                    <img src='{tweet.get("user", {}).get("icon", "")}' width='48' height='48' 
-                         style='border-radius: 24px; margin-right: 10px;'/>
-                    <div>
-                        <div style='font-weight: bold;'>{tweet.get("user", {}).get("name", "")}</div>
-                        <div style='color: #657786;'>@{tweet.get("user", {}).get("screen_name", "")}</div>
+            <div style='margin: 10px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;'>
+                <div style='margin-bottom: 5px;'>
+                    <div style='display: flex; align-items: center; justify-content: space-between;'>
+                        <div style='display: flex; align-items: center;'>
+                            <span style='font-weight: bold; font-size: 15px;'>{tweet.get("user", {}).get("name", "")}</span>
+                            <span style='color: #657786; font-size: 15px; margin-left: 4px;'>
+                                @{tweet.get("user", {}).get("screen_name", "")}
+                                {' <span style="color: #1DA1F2;">✓</span>' if tweet.get("user", {}).get("is_blue_verified") else ""}
+                            </span>
+                            <span style='color: #657786; font-size: 13px; margin-left: 8px;'>
+                                · {time_diff}
+                            </span>
+                        </div>
+                        <span style='color: #1DA1F2; font-size: 12px; cursor: pointer;'>🔗</span>
+                    </div>
+                    <div style='color: #657786; font-size: 14px; display: flex; align-items: center;'>
+                        <span>{tweet.get("user", {}).get("followers_count", 0):,} 关注者</span>
+                        <span style='margin-left: 15px;'>🔄 {tweet.get("retweet_count", 0):,}</span>
+                        <span style='margin-left: 15px;'>❤️ {tweet.get("favorite_count", 0):,}</span>
+                        <span style='margin-left: 15px;'>👁️ {tweet.get("views", 0):,}</span>
                     </div>
                 </div>
-                <div style='margin-left: 58px;'>
-                    <div style='margin-bottom: 10px; line-height: 1.4;'>{tweet.get("text", "")}</div>
-                    {"<img src='" + tweet["medias"][0]["image_url"] + "' width='100%' style='border-radius: 8px; margin: 5px 0;'/>" 
-                     if tweet.get("medias") and tweet["medias"][0].get("image_url") else ""}
-                    <div style='color: #657786; font-size: 12px; margin-top: 5px;'>
-                        <span style='margin-right: 15px;'>❤️ {tweet.get("favorite_count", 0):,}</span>
-                        <span style='margin-right: 15px;'>🔄 {tweet.get("retweet_count", 0):,}</span>
-                        <span>👁️ {tweet.get("views", 0):,}</span>
-                    </div>
-                </div>
+                <div style='color: #14171a; font-size: 15px; line-height: 1.4; margin: 8px 0;'>{tweet.get("text", "")}</div>
+                {"<div style='margin: 8px 0;'><img src='" + tweet["medias"][0]["image_url"] + "' width='100%' style='border-radius: 8px; margin: 5px 0;'/></div>" 
+                 if tweet.get("medias") and tweet["medias"][0].get("image_url") else ""}
             </div>
             """
             doc.setHtml(html)
@@ -594,26 +637,41 @@ class TweetItemDelegate(QStyledItemDelegate):
                 return QSize(0, 0)
                 
             doc = QTextDocument()
+            
+            # 获取发推时间
+            created_at = tweet.get("created_at", "0")
+            try:
+                timestamp = int(float(created_at)) * 1000
+                time_diff = TimeUtil.get_time_diff(timestamp)
+            except:
+                time_diff = ""
+            
             html = f"""
-            <div style='margin: 10px;'>
-                <div style='display: flex; align-items: center; margin-bottom: 5px;'>
-                    <img src='{tweet.get("user", {}).get("icon", "")}' width='48' height='48' 
-                         style='border-radius: 24px; margin-right: 10px;'/>
-                    <div>
-                        <div style='font-weight: bold;'>{tweet.get("user", {}).get("name", "")}</div>
-                        <div style='color: #657786;'>@{tweet.get("user", {}).get("screen_name", "")}</div>
+            <div style='margin: 10px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;'>
+                <div style='margin-bottom: 5px;'>
+                    <div style='display: flex; align-items: center; justify-content: space-between;'>
+                        <div style='display: flex; align-items: center;'>
+                            <span style='font-weight: bold; font-size: 15px;'>{tweet.get("user", {}).get("name", "")}</span>
+                            <span style='color: #657786; font-size: 15px; margin-left: 4px;'>
+                                @{tweet.get("user", {}).get("screen_name", "")}
+                                {' <span style="color: #1DA1F2;">✓</span>' if tweet.get("user", {}).get("is_blue_verified") else ""}
+                            </span>
+                            <span style='color: #657786; font-size: 13px; margin-left: 8px;'>
+                                · {time_diff}
+                            </span>
+                        </div>
+                        <span style='color: #1DA1F2; font-size: 12px; cursor: pointer;'>🔗</span>
+                    </div>
+                    <div style='color: #657786; font-size: 14px; display: flex; align-items: center;'>
+                        <span>{tweet.get("user", {}).get("followers_count", 0):,} 关注者</span>
+                        <span style='margin-left: 15px;'>🔄 {tweet.get("retweet_count", 0):,}</span>
+                        <span style='margin-left: 15px;'>❤️ {tweet.get("favorite_count", 0):,}</span>
+                        <span style='margin-left: 15px;'>👁️ {tweet.get("views", 0):,}</span>
                     </div>
                 </div>
-                <div style='margin-left: 58px;'>
-                    <div style='margin-bottom: 10px; line-height: 1.4;'>{tweet.get("text", "")}</div>
-                    {"<img src='" + tweet["medias"][0]["image_url"] + "' width='100%' style='border-radius: 8px; margin: 5px 0;'/>" 
-                     if tweet.get("medias") and tweet["medias"][0].get("image_url") else ""}
-                    <div style='color: #657786; font-size: 12px; margin-top: 5px;'>
-                        <span style='margin-right: 15px;'>❤️ {tweet.get("favorite_count", 0):,}</span>
-                        <span style='margin-right: 15px;'>🔄 {tweet.get("retweet_count", 0):,}</span>
-                        <span>👁️ {tweet.get("views", 0):,}</span>
-                    </div>
-                </div>
+                <div style='color: #14171a; font-size: 15px; line-height: 1.4; margin: 8px 0;'>{tweet.get("text", "")}</div>
+                {"<div style='margin: 8px 0;'><img src='" + tweet["medias"][0]["image_url"] + "' width='100%' style='border-radius: 8px; margin: 5px 0;'/></div>" 
+                 if tweet.get("medias") and tweet["medias"][0].get("image_url") else ""}
             </div>
             """
             doc.setHtml(html)
