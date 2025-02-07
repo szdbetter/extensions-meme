@@ -12,6 +12,7 @@ from PySide6.QtUiTools import QUiLoader
 from PySide6.QtCore import Qt, QCoreApplication, QAbstractTableModel, QModelIndex, QThread, Signal, QDateTime
 from PySide6.QtGui import (QPixmap, QColor, QBrush, QFont, QPalette, 
                           QStandardItemModel, QStandardItem)
+from qt_material import apply_stylesheet
 import sys
 import os
 import requests
@@ -225,15 +226,22 @@ class DevDataFetcher:
     @staticmethod
     def format_dev_info(creator: str, original_text: str = "") -> str:
         """格式化开发者信息"""
-        dev_info = f"""{original_text} 
+        dev_info = f"""<span style='color: #000; font-weight: bold;'>DEV信息：</span>
                   <a href='https://gmgn.ai/sol/address/{creator}' style='color: #3498db; text-decoration: none;'>{creator}</a>
-                  <span style='cursor: pointer;' onclick='navigator.clipboard.writeText("{creator}")'>📋</span>"""
+                  <span style='cursor: pointer; font-size: 0.5em;' 
+                  onclick='window.copyDevAddress("{creator}")'>📋</span>"""
         return f"""
         <html>
         <head>
         <style>
             a:hover {{ text-decoration: underline; }}
         </style>
+        <script>
+            function copyDevAddress(address) {{
+                navigator.clipboard.writeText(address);
+                window.logCopied(address);
+            }}
+        </script>
         </head>
         <body>
             {dev_info}
@@ -398,12 +406,60 @@ class TimeUtil:
         else:
             return f"{minutes}分钟前"
 
+class SmartMoneyTableModel(QAbstractTableModel):
+    """聪明钱交易表格模型"""
+    
+    def __init__(self, data: List[Dict[str, Any]], parent=None):
+        super().__init__(parent)
+        self._data = data
+        self._headers = ["聪明钱", "操作", "价格", "金额(SOL)"]
+
+    def rowCount(self, parent=QModelIndex()) -> int:
+        return len(self._data)
+
+    def columnCount(self, parent=QModelIndex()) -> int:
+        return len(self._headers)
+
+    def data(self, index: QModelIndex, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+        
+        if role == Qt.DisplayRole:
+            row_data = self._data[index.row()]
+            col = index.column()
+            
+            if col == 0:  # 聪明钱
+                address = row_data.get('address', '')
+                labels = row_data.get('labels', [])
+                return ', '.join(labels) if labels else address[:6] + '...'
+            elif col == 1:  # 操作
+                return "买入" if row_data.get('is_buy', False) else "卖出"
+            elif col == 2:  # 价格
+                return f"${row_data.get('price_usd', 0):.4f}"
+            elif col == 3:  # 金额
+                return f"{int(row_data.get('volume_native', 0))}"
+        
+        elif role == Qt.BackgroundRole:
+            row_data = self._data[index.row()]
+            if row_data.get('is_buy', False):
+                return QBrush(QColor('#e6ffe6'))  # 浅绿色
+            else:
+                return QBrush(QColor('#ffe6e6'))  # 浅红色
+                
+        return None
+
+    def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.DisplayRole):
+        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+            return self._headers[section]
+        return None
+
 class MainWindow(QMainWindow):
     """主窗口类"""
 
     def __init__(self):
         """初始化主窗口"""
         super(MainWindow, self).__init__()
+        self.clipboard = QApplication.clipboard()  # 初始化剪贴板
         self.init_ui()
 
     def init_ui(self):
@@ -445,6 +501,8 @@ class MainWindow(QMainWindow):
             'labelDevTrade': (QLabel, '开发者交易标签'),
             'tableDevHistory': (QTableView, '开发者历史表格'),
             'tableDevTrade': (QTableView, '开发者交易表格'),
+            'tableSmartMoney': (QTableView, '聪明钱交易表格'),
+            'labelSmartMoneyInfo': (QLabel, '聪明钱统计信息'),
             'listViewLog': (QListView, '日志列表'),
             'labelCoinPic': (QLabel, '代币图片'),
             'labelCoinSymbol': (QLabel, '代币名称'),
@@ -485,63 +543,61 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        # 设置按钮样式
-        self.btnQuery.setStyleSheet("""
-            QPushButton {
-                background-color: #3498db;
-                color: white;
-                border: none;
-                padding: 5px 15px;
-                border-radius: 4px;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
-            QPushButton:pressed {
-                background-color: #2472a4;
-            }
-        """)
+        # 移除之前的按钮样式，使用Material主题样式
+        self.btnQuery.setProperty('class', 'primary')  # 使用Material主题的主要按钮样式
 
-        # 设置表格样式
+        # 设置表格样式，与Material主题配合
         table_delegate = TableStyleDelegate()
         for table in [self.tableDevHistory, self.tableDevTrade]:
             table.setItemDelegate(table_delegate)
             table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-            table.setStyleSheet("""
-                QTableView {
-                    border: 1px solid #dcdcdc;
-                    gridline-color: #f0f0f0;
-                    background-color: white;
-                }
-                QHeaderView::section {
-                    background-color: #f8f9fa;
-                    padding: 4px;
-                    border: none;
-                    border-bottom: 1px solid #dcdcdc;
-                }
-                QTableView::item {
-                    padding: 4px;
-                }
-                QTableView::item:selected {
-                    background-color: #e8f0fe;
-                }
-            """)
+            # 移除之前的表格样式，使用Material主题样式
+
+        # 设置列表视图样式，与Material主题配合
+        self.listViewLog.setProperty('class', 'dense')  # 使用Material主题的紧凑列表样式
 
         # 设置默认CA地址
         default_ca = "9DHe3pycTuymFk4H4bbPoAJ4hQrr2kaLDF6J6aAKpump"
         self.leCA.setText(default_ca)
 
+    def copy_dev_address(self, address: str):
+        """复制开发者地址到剪贴板"""
+        self.clipboard.setText(address)
+        self.add_log("复制成功", f"已复制Dev地址：{address}")
+
+    @staticmethod
+    def format_dev_info(creator: str) -> str:
+        """格式化开发者信息"""
+        return f"""
+        <html>
+        <head>
+        <style>
+            a:hover {{ text-decoration: underline; }}
+            .copy-icon {{
+                cursor: pointer;
+                font-size: 0.5em;
+                color: #666;
+            }}
+            .dev-label {{
+                color: #000;
+                font-weight: bold;
+            }}
+            .dev-address {{
+                color: #3498db;
+                text-decoration: none;
+            }}
+        </style>
+        </head>
+        <body>
+            <span class='dev-label'>DEV信息：</span>
+            <a href='https://gmgn.ai/sol/address/{creator}' class='dev-address'>{creator}</a>
+            <span class='copy-icon' onclick='copyAddress'> 📋</span>
+        </body>
+        </html>
+        """
+
     def format_coin_info(self, coin_data: Dict[str, Any]) -> str:
-        """
-        格式化代币信息，使用HTML格式美化显示
-
-        Args:
-            coin_data: 代币数据字典
-
-        Returns:
-            str: HTML格式的代币信息
-        """
+        """格式化代币信息，使用Material Design风格"""
         name = coin_data.get('name', 'Unknown')
         symbol = coin_data.get('symbol', '')
         created_time = TimeUtil.get_time_diff(coin_data.get('created_timestamp', 0))
@@ -554,59 +610,65 @@ class MainWindow(QMainWindow):
         # 获取base64编码的图片
         image_data = ImageHandler.get_image_base64(image_uri) if image_uri else ''
 
-        # 使用HTML格式化信息
+        # 更新HTML样式以匹配Material Design
         html = f"""
         <html>
         <head>
         <style type="text/css">
             .container {{
-                font-family: Arial, sans-serif;
-                padding: 10px;
+                font-family: Roboto, Arial, sans-serif;
+                padding: 16px;
                 max-width: 800px;
+                background-color: var(--background);
+                color: var(--text);
             }}
             .header {{
                 display: flex;
                 align-items: flex-start;
-                gap: 20px;
-                margin-bottom: 20px;
+                gap: 16px;
+                margin-bottom: 16px;
             }}
             .coin-image {{
-                width: 32px;
-                height: 32px;
+                width: 48px;
+                height: 48px;
                 object-fit: cover;
-                border-radius: 4px;
+                border-radius: 8px;
                 flex-shrink: 0;
-                vertical-align: middle;
-                margin-top: 4px;
             }}
             .info {{
                 flex: 1;
                 min-width: 0;
             }}
             .title {{
-                font-size: 16px;
+                font-size: 18px;
+                font-weight: 500;
                 margin-bottom: 8px;
-                color: #333;
+                color: var(--primary);
             }}
             .description {{
                 font-size: 14px;
                 line-height: 1.5;
-                color: #666;
+                color: var(--text-secondary);
             }}
             .buttons {{
-                margin-top: 15px;
+                margin-top: 16px;
                 display: flex;
                 flex-wrap: wrap;
                 gap: 8px;
             }}
             .button {{
                 display: inline-block;
-                padding: 5px 12px;
-                background-color: #3498db;
-                color: white;
+                padding: 8px 16px;
+                background-color: var(--primary);
+                color: var(--on-primary);
                 text-decoration: none;
                 border-radius: 4px;
-                font-size: 12px;
+                font-size: 14px;
+                font-weight: 500;
+                transition: background-color 0.2s;
+            }}
+            .button:hover {{
+                background-color: var(--primary-dark);
             }}
         </style>
         </head>
@@ -615,9 +677,9 @@ class MainWindow(QMainWindow):
             <div class='header'>
                 <img src='{image_data}' class='coin-image' onerror="this.style.display='none'"/>
                 <div class='info'>
-                    <div class='title'>代币名称：{name} ({symbol})，{created_time}</div>
+                    <div class='title'>{name} ({symbol})</div>
                     <div class='description'>
-                        代币介绍：<br/>
+                        创建时间：{created_time}<br/>
                         {description}
                     </div>
                 </div>
@@ -645,7 +707,12 @@ class MainWindow(QMainWindow):
         history_data = DevDataFetcher.fetch_dev_history(creator)
         if history_data:
             # 更新开发者信息标签
-            self.labelDevInfo.setText(DevDataFetcher.format_dev_info(creator))
+            self.labelDevInfo.setText(self.format_dev_info(creator))
+            self.labelDevInfo.setOpenExternalLinks(True)  # 允许打开外部链接
+            
+            # 设置点击事件
+            self.labelDevInfo.mousePressEvent = lambda e: self.handle_dev_info_click(e, creator)
+            
             self.labelDevHistory.setText(DevDataFetcher.format_dev_history(history_data))
             
             # 按市值排序
@@ -698,6 +765,27 @@ class MainWindow(QMainWindow):
         # 添加日志
         self.add_log(f"开始查询代币信息", f"合约地址: {contract_address}")
             
+        # 获取聪明钱数据
+        url = f"https://chain.fm/api/trpc/parsedTransaction.list?batch=1&input=%7B%220%22%3A%7B%22json%22%3A%7B%22page%22%3A1%2C%22pageSize%22%3A30%2C%22dateRange%22%3Anull%2C%22token%22%3A%22{contract_address}%22%2C%22address%22%3A%5B%5D%2C%22useFollowing%22%3Atrue%2C%22includeChannels%22%3A%5B%5D%2C%22lastUpdateTime%22%3Anull%2C%22events%22%3A%5B%5D%7D%2C%22meta%22%3A%7B%22values%22%3A%7B%22dateRange%22%3A%5B%22undefined%22%5D%2C%22lastUpdateTime%22%3A%5B%22undefined%22%5D%7D%7D%7D%7D"
+        
+        try:
+            response = requests.get(url)
+            if response.status_code == 401:
+                self.add_log("获取聪明钱数据失败", "请手动访问Chain.fm一次再运行API")
+                self.show_error_message("获取聪明钱数据失败：请手动访问Chain.fm一次再运行API")
+            else:
+                response.raise_for_status()
+                data = response.json()
+                if data and len(data) > 0:
+                    result = data[0].get('result', {})
+                    transactions = result.get('data', {}).get('json', {}).get('data', {}).get('parsedTransactions', [])
+                    address_labels = result.get('data', {}).get('json', {}).get('renderContext', {}).get('addressLabelsMap', {})
+                    self.update_smart_money_info(transactions, address_labels)
+                    self.add_log("获取聪明钱数据成功")
+        except Exception as e:
+            self.add_log("获取聪明钱数据失败", str(e))
+            self.show_error_message(f"获取聪明钱数据失败：{str(e)}")
+            
         # 创建异步工作线程获取代币数据
         self.coin_worker = ApiWorker(CoinDataFetcher.fetch_coin_data, contract_address)
         self.coin_worker.finished.connect(self.on_coin_data_received)
@@ -744,10 +832,12 @@ class MainWindow(QMainWindow):
         if history_data:
             self.add_log("获取开发者历史记录成功", f"历史发币数: {len(history_data)}")
             
-            # 更新开发者信息标签，保留原有文本
-            original_text = self.labelDevInfo.text()
-            self.labelDevInfo.setText(DevDataFetcher.format_dev_info(creator, original_text))
+            # 更新开发者信息标签
+            self.labelDevInfo.setText(self.format_dev_info(creator))
             self.labelDevInfo.setOpenExternalLinks(True)  # 允许打开外部链接
+            
+            # 设置点击事件
+            self.labelDevInfo.mousePressEvent = lambda e: self.handle_dev_info_click(e, creator)
             
             self.labelDevHistory.setText(DevDataFetcher.format_dev_history(history_data))
             
@@ -841,6 +931,77 @@ class MainWindow(QMainWindow):
                 }
             """)
 
+    def handle_dev_info_click(self, event, creator: str):
+        """处理开发者信息标签的点击事件"""
+        # 获取点击位置的HTML
+        pos = event.pos()
+        html = self.labelDevInfo.text()
+        
+        # 如果点击了复制图标
+        if "📋" in html[self.labelDevInfo.hitTest(pos)]:
+            self.copy_dev_address(creator)
+
+    def update_smart_money_info(self, transactions_data: List[Dict[str, Any]], address_labels_map: Dict[str, List[Dict[str, str]]]):
+        """更新聪明钱信息"""
+        processed_data = []
+        buy_count = 0
+        sell_count = 0
+        buy_volume = 0
+        sell_volume = 0
+        
+        for tx in transactions_data:
+            for event in tx.get('events', []):
+                address = event.get('address', '')
+                labels = [label.get('label', '') for label in address_labels_map.get(address, [])]
+                
+                if not labels:  # 如果没有标签，跳过
+                    continue
+                    
+                data = event.get('data', {})
+                order = data.get('order', {})
+                input_token = data.get('input', {}).get('token', '')
+                output_token = data.get('output', {}).get('token', '')
+                contract = self.leCA.text().strip()
+                
+                is_buy = output_token == contract
+                volume_native = order.get('volume_native', 0)
+                
+                if is_buy:
+                    buy_count += 1
+                    buy_volume += volume_native
+                else:
+                    sell_count += 1
+                    sell_volume += volume_native
+                
+                processed_data.append({
+                    'address': address,
+                    'labels': labels,
+                    'is_buy': is_buy,
+                    'price_usd': order.get('price_usd', 0),
+                    'volume_native': volume_native
+                })
+        
+        # 更新表格
+        model = SmartMoneyTableModel(processed_data)
+        self.tableSmartMoney.setModel(model)
+        self.tableSmartMoney.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        
+        # 更新统计信息
+        net_volume = buy_volume - sell_volume
+        info_html = f"""
+        <html>
+        <body>
+            <span>聪明钱：</span>
+            <span style='color: #4CAF50;'>买{buy_count}人 {int(buy_volume)}SOL</span>，
+            <span style='color: #F44336;'>卖{sell_count}人 {int(sell_volume)}SOL</span>，
+            <span style='color: {"#4CAF50" if net_volume >= 0 else "#F44336"}'>
+                净{("买入" if net_volume >= 0 else "卖出")} {abs(int(net_volume))}SOL
+            </span>
+        </body>
+        </html>
+        """
+        self.labelSmartMoneyInfo.setText(info_html)
+
     @staticmethod
     def show_error_and_exit(message: str):
         """显示错误信息并退出程序"""
@@ -852,7 +1013,16 @@ def main():
     try:
         # 创建应用
         app = QApplication(sys.argv)
+        
+        # 应用Material主题
+        apply_stylesheet(app, theme='light_blue.xml', invert_secondary=True)
+        
+        # 创建窗口
         window = MainWindow()
+        
+        # 设置窗口标题和图标
+        window.ui.setWindowTitle("MEME通 - Material Style")
+        
         sys.exit(app.exec())
     except Exception as e:
         print(f"程序启动时出错: {str(e)}")
