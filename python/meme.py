@@ -5,12 +5,12 @@ Solana代币信息查询工具
 描述: 该工具用于查询Solana链上代币信息，支持图片显示和基本信息展示
 """
 
-from PySide6.QtWidgets import (QApplication, QMainWindow, QPushButton, QLineEdit, 
+from PySide6.QtWidgets import (QApplication, QMainWindow, QPushButton, QLineEdit,
                              QTextEdit, QLabel, QTableView, QStyledItemDelegate, QStyle, QHeaderView,
                              QListView, QStyleOptionViewItem)
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtCore import Qt, QCoreApplication, QAbstractTableModel, QModelIndex, QThread, Signal, QDateTime, QSize
-from PySide6.QtGui import (QPixmap, QColor, QBrush, QFont, QPalette, 
+from PySide6.QtGui import (QPixmap, QColor, QBrush, QFont, QPalette,
                           QStandardItemModel, QStandardItem, QTextDocument,
                           QAbstractTextDocumentLayout)
 from qt_material import apply_stylesheet
@@ -31,7 +31,7 @@ locale.setlocale(locale.LC_ALL, '')
 
 class TableStyleDelegate(QStyledItemDelegate):
     """表格样式代理类"""
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.header_font = QFont()
@@ -39,13 +39,13 @@ class TableStyleDelegate(QStyledItemDelegate):
 
     def initStyleOption(self, option, index):
         super().initStyleOption(option, index)
-        
+
         # 设置表头样式
         if isinstance(index.model(), QAbstractTableModel):
             if index.parent().isValid() == False and index.model().headerData(index.row(), Qt.Vertical, Qt.DisplayRole) is not None:
                 option.font = self.header_font
                 return
-            
+
         # 设置买卖操作的背景色
         model = index.model()
         if hasattr(model, '_data') and index.row() < len(model._data):
@@ -75,7 +75,7 @@ class ApiWorker(QThread):
 
 class DevHistoryTableModel(QAbstractTableModel):
     """开发者历史发币表格模型"""
-    
+
     def __init__(self, data: List[Dict[str, Any]], parent=None):
         super().__init__(parent)
         self._data = data
@@ -90,11 +90,11 @@ class DevHistoryTableModel(QAbstractTableModel):
     def data(self, index: QModelIndex, role=Qt.DisplayRole):
         if not index.isValid():
             return None
-        
+
         if role == Qt.DisplayRole:
             row_data = self._data[index.row()]
             col = index.column()
-            
+
             if col == 0:
                 return row_data.get('symbol', '')
             elif col == 1:
@@ -105,7 +105,7 @@ class DevHistoryTableModel(QAbstractTableModel):
             elif col == 3:
                 timestamp = row_data.get('created_timestamp', 0)
                 return TimeUtil.get_time_diff(timestamp)
-        
+
         return None
 
     def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.DisplayRole):
@@ -124,7 +124,7 @@ class DevHistoryTableModel(QAbstractTableModel):
 
 class DevTradeTableModel(QAbstractTableModel):
     """开发者交易记录表格模型"""
-    
+
     def __init__(self, data: List[Dict[str, Any]], creator: str, parent=None):
         super().__init__(parent)
         self._data = data
@@ -140,11 +140,11 @@ class DevTradeTableModel(QAbstractTableModel):
     def data(self, index: QModelIndex, role=Qt.DisplayRole):
         if not index.isValid():
             return None
-        
+
         if role == Qt.DisplayRole:
             row_data = self._data[index.row()]
             col = index.column()
-            
+
             if col == 0:
                 op_map = {
                     "buy": "买入",
@@ -171,7 +171,7 @@ class DevTradeTableModel(QAbstractTableModel):
             elif col == 6:
                 timestamp = row_data.get('time', 0)
                 return TimeUtil.get_time_diff(timestamp * 1000)  # 转换为毫秒
-        
+
         return None
 
     def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.DisplayRole):
@@ -188,7 +188,7 @@ class DevTradeTableModel(QAbstractTableModel):
 
 class DevDataFetcher:
     """开发者数据获取类"""
-    
+
     @staticmethod
     def fetch_dev_history(creator: str) -> Optional[List[Dict[str, Any]]]:
         """获取开发者历史发币记录"""
@@ -198,7 +198,7 @@ class DevDataFetcher:
             "limit": 10,
             "includeNsfw": False
         }
-        
+
         try:
             response = requests.get(url, params=params)
             response.raise_for_status()
@@ -215,7 +215,7 @@ class DevDataFetcher:
             "chain": "solana",
             "token": contract
         }
-        
+
         try:
             response = requests.get(url, params=params)
             response.raise_for_status()
@@ -255,22 +255,22 @@ class DevDataFetcher:
         """格式化开发者历史信息"""
         if not history_data:
             return "未找到开发者历史信息"
-            
+
         total_coins = len(history_data)
         success_coins = sum(1 for coin in history_data if coin.get('complete', False))
         max_market_cap = max((coin.get('usd_market_cap', 0) for coin in history_data), default=0)
-        
+
         total_display = f"{total_coins}+" if total_coins >= 10 else str(total_coins)
         success_display = f"{success_coins}+" if success_coins >= 10 else str(success_coins)
         market_cap_display = DevHistoryTableModel.format_market_cap(max_market_cap)
-        
+
         return f"发币：{total_display}次，成功：{success_display}次，最高市值：{market_cap_display}"
 
     @staticmethod
     def format_dev_trade_status(trade_data: Dict[str, Any]) -> str:
         """格式化开发者交易状态"""
         status = []
-        
+
         if trade_data.get('position_clear'):
             status.append("<span style='color: #e74c3c;'>清仓</span>")
         if trade_data.get('position_increase'):
@@ -279,7 +279,7 @@ class DevDataFetcher:
             status.append("减仓")
         if trade_data.get('trans_out_amount', 0) > 0:
             status.append("转出")
-            
+
         return "，".join(status) if status else "无操作"
 
 class CoinDataFetcher:
@@ -409,7 +409,7 @@ class TimeUtil:
 
 class SmartMoneyTableModel(QAbstractTableModel):
     """聪明钱交易表格模型"""
-    
+
     def __init__(self, data: List[Dict[str, Any]], parent=None):
         super().__init__(parent)
         self._data = data
@@ -427,12 +427,12 @@ class SmartMoneyTableModel(QAbstractTableModel):
     def data(self, index: QModelIndex, role=Qt.DisplayRole):
         if not index.isValid():
             return None
-            
+
         if role == Qt.DisplayRole:
             try:
                 row_data = self._data[index.row()]
                 col = index.column()
-                
+
                 if col == 0:  # 聪明钱
                     address = row_data.get('address', '')
                     labels = row_data.get('labels', [])
@@ -446,14 +446,14 @@ class SmartMoneyTableModel(QAbstractTableModel):
             except Exception as e:
                 print(f"Error in data method: {e}")  # 调试信息
                 return str(e)
-        
+
         elif role == Qt.BackgroundRole:
             row_data = self._data[index.row()]
             if row_data.get('is_buy', False):
                 return QBrush(QColor('#e6ffe6'))  # 浅绿色
             else:
                 return QBrush(QColor('#ffe6e6'))  # 浅红色
-                
+
         return None
 
     def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.DisplayRole):
@@ -466,17 +466,17 @@ class HTMLDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
         options = QStyleOptionViewItem(option)
         self.initStyleOption(options, index)
-        
+
         style = options.widget.style() if options.widget else QApplication.style()
-        
+
         doc = QTextDocument()
         doc.setHtml(options.text)
-        
+
         options.text = ""
         style.drawControl(QStyle.CE_ItemViewItem, options, painter)
-        
+
         ctx = QAbstractTextDocumentLayout.PaintContext()
-        
+
         textRect = style.subElementRect(QStyle.SE_ItemViewItemText, options)
         painter.save()
         painter.translate(textRect.topLeft())
@@ -486,7 +486,7 @@ class HTMLDelegate(QStyledItemDelegate):
     def sizeHint(self, option, index):
         options = QStyleOptionViewItem(option)
         self.initStyleOption(options, index)
-        
+
         doc = QTextDocument()
         doc.setHtml(options.text)
         return QSize(doc.idealWidth(), doc.size().height())
@@ -533,7 +533,6 @@ class MainWindow(QMainWindow):
         controls = {
             'btnQuery': (QPushButton, '查询按钮'),
             'leCA': (QLineEdit, '合约地址输入框'),
-            'txtCoinInfo': (QTextEdit, '代币信息显示区'),
             'labelDevInfo': (QLabel, '开发者信息标签'),
             'labelDevHistory': (QLabel, '开发者历史标签'),
             'labelDevTrade': (QLabel, '开发者交易标签'),
@@ -561,11 +560,11 @@ class MainWindow(QMainWindow):
         # 初始化日志列表模型
         self.log_model = QStandardItemModel()
         self.listViewLog.setModel(self.log_model)
-        
+
         # 设置列表视图可以选择和复制
         self.listViewLog.setSelectionMode(QListView.ExtendedSelection)  # 允许多选
         self.listViewLog.setTextElideMode(Qt.ElideNone)  # 不省略文本
-        
+
         # 设置列表视图样式
         self.listViewLog.setStyleSheet("""
             QListView {
@@ -755,17 +754,17 @@ class MainWindow(QMainWindow):
             # 更新开发者信息标签
             self.labelDevInfo.setText(self.format_dev_info(creator))
             self.labelDevInfo.setOpenExternalLinks(True)  # 允许打开外部链接
-            
+
             # 设置点击事件
             self.labelDevInfo.mousePressEvent = lambda e: self.handle_dev_info_click(e, creator)
-            
+
             self.labelDevHistory.setText(DevDataFetcher.format_dev_history(history_data))
-            
+
             # 按市值排序
-            sorted_history = sorted(history_data, 
-                                  key=lambda x: (x.get('usd_market_cap', 0), x.get('created_timestamp', 0)), 
+            sorted_history = sorted(history_data,
+                                  key=lambda x: (x.get('usd_market_cap', 0), x.get('created_timestamp', 0)),
                                   reverse=True)
-            
+
             # 更新历史表格
             history_model = DevHistoryTableModel(sorted_history)
             self.tableDevHistory.setModel(history_model)
@@ -787,17 +786,17 @@ class MainWindow(QMainWindow):
             link: 可选的链接
         """
         current_time = QDateTime.currentDateTime().toString("HH:mm:ss")
-        
+
         # 构建HTML格式的日志文本
         log_html = f"""
         <div style='margin: 2px 0;'>
             <span style='color: #666;'>[{current_time}]</span> 
             <span style='color: #000000;'>▶ {operation}</span>
         """
-        
+
         if link:
             log_html += f""" <a href='{link}' style='color: #2196F3; text-decoration: none;'>[链接]</a>"""
-            
+
         if status:
             if "成功" in status:
                 status_color = "#4CAF50"  # 绿色
@@ -807,19 +806,19 @@ class MainWindow(QMainWindow):
             else:
                 status_color = "#000000"  # 黑色
             log_html += f""" <span style='color: {status_color};'>→ {status}</span>"""
-            
+
         log_html += "</div>"
-        
+
         item = QStandardItem()
         item.setData(log_html, Qt.DisplayRole)
-        
+
         # 设置交替背景色
         row = self.log_model.rowCount()
         if row % 2 == 0:
             item.setBackground(QBrush(QColor("#f8f9fa")))
         else:
             item.setBackground(QBrush(QColor("#ffffff")))
-            
+
         self.log_model.insertRow(0, item)  # 在顶部插入
         self.listViewLog.setItemDelegate(HTMLDelegate(self.listViewLog))  # 使用HTML代理
         self.listViewLog.scrollToTop()
@@ -834,10 +833,10 @@ class MainWindow(QMainWindow):
         # 禁用查询按钮
         self.btnQuery.setEnabled(False)
         self.btnQuery.setText("查询中...")
-        
+
         # 添加日志
         self.add_log("开始查询代币信息", f"合约地址: {contract_address}", f"https://gmgn.ai/sol/token/{contract_address}")
-        
+
         # 创建异步工作线程获取代币数据
         self.coin_worker = ApiWorker(CoinDataFetcher.fetch_coin_data, contract_address)
         self.coin_worker.finished.connect(self.on_coin_data_received)
@@ -848,17 +847,13 @@ class MainWindow(QMainWindow):
         """处理代币数据"""
         if coin_data:
             # 添加日志
-            self.add_log("获取代币信息", 
+            self.add_log("获取代币信息",
                         f"成功 - {coin_data.get('name', '')} ({coin_data.get('symbol', '')})",
                         f"https://gmgn.ai/sol/token/{coin_data.get('mint', '')}")
-            
-            # 显示代币信息
-            self.txtCoinInfo.setHtml(self.format_coin_info(coin_data))
-            self.txtCoinInfo.setOpenExternalLinks(True)
 
             # 更新代币相关标签
             self.update_coin_labels(coin_data)
-            
+
             # 异步获取开发者信息
             creator = coin_data.get('creator')
             if creator:
@@ -870,8 +865,7 @@ class MainWindow(QMainWindow):
                 self.trade_worker.start()
         else:
             self.add_log("获取代币信息", "失败 - 未找到代币信息或发生错误")
-            self.show_error_message("未找到代币信息或发生错误")
-        
+
         # 恢复查询按钮
         self.btnQuery.setEnabled(True)
         self.btnQuery.setText("查询")
@@ -880,12 +874,12 @@ class MainWindow(QMainWindow):
         """处理交易数据"""
         if trade_data:
             self.labelDevTrade.setText(f"交易信息（{DevDataFetcher.format_dev_trade_status(trade_data)}）")
-            
+
             if 'transactions' in trade_data:
                 self.add_log("获取开发者交易记录", f"成功 - {len(trade_data['transactions'])}条交易")
                 trade_model = DevTradeTableModel(trade_data['transactions'], creator)
                 self.tableDevTrade.setModel(trade_model)
-                
+
                 # 获取历史记录
                 self.add_log("请求开发者历史记录", "正在获取...", f"https://gmgn.ai/sol/address/{creator}")
                 self.history_worker = ApiWorker(DevDataFetcher.fetch_dev_history, creator)
@@ -897,29 +891,29 @@ class MainWindow(QMainWindow):
         """处理历史数据"""
         if history_data:
             self.add_log("获取开发者历史记录", f"成功 - {len(history_data)}条记录")
-            
+
             # 更新开发者信息标签
             self.labelDevInfo.setText(self.format_dev_info(creator))
             self.labelDevInfo.setOpenExternalLinks(True)
-            
+
             # 设置点击事件
             self.labelDevInfo.mousePressEvent = lambda e: self.handle_dev_info_click(e, creator)
-            
+
             self.labelDevHistory.setText(DevDataFetcher.format_dev_history(history_data))
-            
+
             # 按市值排序
-            sorted_history = sorted(history_data, 
-                                  key=lambda x: (x.get('usd_market_cap', 0), x.get('created_timestamp', 0)), 
+            sorted_history = sorted(history_data,
+                                  key=lambda x: (x.get('usd_market_cap', 0), x.get('created_timestamp', 0)),
                                   reverse=True)
-            
+
             history_model = DevHistoryTableModel(sorted_history)
             self.tableDevHistory.setModel(history_model)
-            
+
             # 开始获取聪明钱数据
             self.add_log("请求聪明钱信息", "正在获取...", "https://chain.fm")
             contract_address = self.leCA.text().strip()
             url = f"https://chain.fm/api/trpc/parsedTransaction.list?batch=1&input=%7B%220%22%3A%7B%22json%22%3A%7B%22page%22%3A1%2C%22pageSize%22%3A30%2C%22dateRange%22%3Anull%2C%22token%22%3A%22{contract_address}%22%2C%22address%22%3A%5B%5D%2C%22useFollowing%22%3Atrue%2C%22includeChannels%22%3A%5B%5D%2C%22lastUpdateTime%22%3Anull%2C%22events%22%3A%5B%5D%7D%2C%22meta%22%3A%7B%22values%22%3A%7B%22dateRange%22%3A%5B%22undefined%22%5D%2C%22lastUpdateTime%22%3A%5B%22undefined%22%5D%7D%7D%7D%7D"
-            
+
             headers = {
                 'authority': 'chain.fm',
                 'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
@@ -938,27 +932,25 @@ class MainWindow(QMainWindow):
                 'upgrade-insecure-requests': '1',
                 'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
             }
-            
+
             try:
                 response = requests.get(url, headers=headers)
-                
+
                 if response.status_code == 401:
                     self.add_log("获取聪明钱数据", "失败 - 需要登录Chain.fm", "https://chain.fm")
                     self.show_error_message("获取聪明钱数据失败：请手动访问Chain.fm一次再运行API")
                 else:
                     response.raise_for_status()
                     data = response.json()
-                    
+
                     if data and len(data) > 0:
                         result = data[0].get('result', {})
                         transactions = result.get('data', {}).get('json', {}).get('data', {}).get('parsedTransactions', [])
-                        address_labels = result.get('data', {}).get('json', {}).get('renderContext', {}).get('addressLabelsMap', {})
-                        
-                        if transactions and address_labels:
-                            self.add_log("获取聪明钱数据", f"成功 - 获取到{len(transactions)}条交易记录，{len(address_labels)}个地址标签")
-                            self.update_smart_money_info(transactions, address_labels)
-                        else:
-                            self.add_log("获取聪明钱数据", "失败 - 返回数据为空")
+                        #address_labels = result.get('data', {}).get('json', {}).get('renderContext', {}).get('addressLabelsMap', {})
+                        address_labels = result['data']['json']['data']['renderContext']['addressLabelsMap']
+
+                        self.add_log("获取聪明钱数据", f"成功 - 获取到{len(transactions)}条交易记录，{len(address_labels)}个地址标签")
+                        self.update_smart_money_info(transactions, address_labels)
                     else:
                         self.add_log("获取聪明钱数据", "失败 - 返回数据为空")
             except Exception as e:
@@ -968,7 +960,6 @@ class MainWindow(QMainWindow):
     def on_api_error(self, error_msg):
         """处理API错误"""
         self.add_log("API请求错误", f"错误 - {error_msg}")
-        self.show_error_message(f"API请求错误: {error_msg}")
         self.btnQuery.setEnabled(True)
         self.btnQuery.setText("查询")
 
@@ -993,7 +984,7 @@ class MainWindow(QMainWindow):
         </body>
         </html>
         """
-        self.txtCoinInfo.setHtml(error_html)
+        # 移除 self.txtCoinInfo.setHtml(error_html)
 
     def update_coin_labels(self, coin_data: Dict[str, Any]):
         """更新代币相关标签"""
@@ -1042,24 +1033,22 @@ class MainWindow(QMainWindow):
         # 获取点击位置的HTML
         pos = event.pos()
         html = self.labelDevInfo.text()
-        
+
         # 如果点击了复制图标
         if "📋" in html[self.labelDevInfo.hitTest(pos)]:
             self.copy_dev_address(creator)
 
     def update_smart_money_info(self, transactions_data: List[Dict[str, Any]], address_labels_map: Dict[str, List[Dict[str, str]]]):
         """更新聪明钱信息"""
-        # 打印调试信息
-        self.add_log("开始处理智能钱包数据", f"交易数据长度: {len(transactions_data)}")
-        self.add_log("地址标签数据", f"标签数量: {len(address_labels_map)}")
-        
         processed_data = []
         buy_count = 0
         sell_count = 0
         buy_volume = 0
         sell_volume = 0
-        
-        # 保存原始数据到文件以便调试
+
+        self.add_log(f"开始处理{len(transactions_data)}条交易数据")
+
+        # 保存原始数据到文件
         try:
             with open('smart_money_raw_data.json', 'w', encoding='utf-8') as f:
                 json.dump({
@@ -1067,50 +1056,74 @@ class MainWindow(QMainWindow):
                     'address_labels': address_labels_map
                 }, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            self.add_log("保存原始数据失败", f"错误: {str(e)}")
-        
-        # 处理每个交易
+            self.add_log("保存原始数据", f"错误 - 无法保存到文件: {str(e)}")
+
         for tx in transactions_data:
             for event in tx.get('events', []):
                 address = event.get('address', '')
                 labels = address_labels_map.get(address, [])
-                
+
                 if not labels:  # 如果没有标签，跳过
                     continue
-                    
+
+                # 只取第一个标签
+                first_label = labels[0].get('label', '')
+
                 data = event.get('data', {})
                 order = data.get('order', {})
                 input_token = data.get('input', {}).get('token', '')
                 output_token = data.get('output', {}).get('token', '')
                 contract = self.leCA.text().strip()
-                
+
                 is_buy = output_token == contract
                 volume_native = order.get('volume_native', 0)
-                
+
                 if is_buy:
                     buy_count += 1
                     buy_volume += volume_native
                 else:
                     sell_count += 1
                     sell_volume += volume_native
-                
+
                 processed_data.append({
                     'address': address,
-                    'labels': [label.get('label', '') for label in labels],  # 直接获取标签列表
+                    'labels': [first_label],  # 只保存第一个标签
                     'is_buy': is_buy,
                     'price_usd': order.get('price_usd', 0),
                     'volume_native': volume_native
                 })
-        
+
+        # 保存处理后的数据到文件
+        try:
+            with open('smart_money_processed_data.json', 'w', encoding='utf-8') as f:
+                json.dump({
+                    'processed_data': processed_data,
+                    'summary': {
+                        'buy_count': buy_count,
+                        'sell_count': sell_count,
+                        'buy_volume': buy_volume,
+                        'sell_volume': sell_volume
+                    }
+                }, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            self.add_log("保存处理后数据", f"错误 - 无法保存到文件: {str(e)}")
+
+        self.add_log(f"处理完成: 买入{buy_count}笔, 卖出{sell_count}笔")
+
         # 更新表格
         if processed_data:
             model = SmartMoneyTableModel(processed_data)
             self.tableSmartMoney.setModel(model)
             self.tableSmartMoney.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-            self.add_log("表格更新完成", f"显示 {len(processed_data)} 条记录")
+
+            # 设置表格代理以处理背景色
+            self.tableSmartMoney.setItemDelegate(TableStyleDelegate())
+
+            # 打印一些调试信息
+            self.add_log("表格数据", f"成功 - 添加了{len(processed_data)}行数据")
         else:
-            self.add_log("表格更新", "警告 - 没有可显示的数据")
-        
+            self.add_log("表格数据", "警告 - 没有可显示的数据")
+
         # 更新统计信息
         net_volume = buy_volume - sell_volume
         info_html = f"""
@@ -1126,7 +1139,7 @@ class MainWindow(QMainWindow):
         </html>
         """
         self.labelSmartMoneyInfo.setText(info_html)
-        self.add_log("智能钱包信息更新完成", f"买入: {buy_count}笔, 卖出: {sell_count}笔")
+        self.add_log("聪明钱信息更新完成")
 
     @staticmethod
     def show_error_and_exit(message: str):
@@ -1139,16 +1152,16 @@ def main():
     try:
         # 创建应用
         app = QApplication(sys.argv)
-        
+
         # 应用Material主题
         apply_stylesheet(app, theme='light_blue.xml', invert_secondary=True)
-        
+
         # 创建窗口
         window = MainWindow()
-        
+
         # 设置窗口标题和图标
         window.ui.setWindowTitle("MEME通 - Material Style")
-        
+
         sys.exit(app.exec())
     except Exception as e:
         print(f"程序启动时出错: {str(e)}")
