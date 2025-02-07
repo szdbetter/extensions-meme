@@ -954,8 +954,11 @@ class MainWindow(QMainWindow):
                         transactions = result.get('data', {}).get('json', {}).get('data', {}).get('parsedTransactions', [])
                         address_labels = result.get('data', {}).get('json', {}).get('renderContext', {}).get('addressLabelsMap', {})
                         
-                        self.add_log("获取聪明钱数据", f"成功 - 获取到{len(transactions)}条交易记录，{len(address_labels)}个地址标签")
-                        self.update_smart_money_info(transactions, address_labels)
+                        if transactions and address_labels:
+                            self.add_log("获取聪明钱数据", f"成功 - 获取到{len(transactions)}条交易记录，{len(address_labels)}个地址标签")
+                            self.update_smart_money_info(transactions, address_labels)
+                        else:
+                            self.add_log("获取聪明钱数据", "失败 - 返回数据为空")
                     else:
                         self.add_log("获取聪明钱数据", "失败 - 返回数据为空")
             except Exception as e:
@@ -1046,15 +1049,17 @@ class MainWindow(QMainWindow):
 
     def update_smart_money_info(self, transactions_data: List[Dict[str, Any]], address_labels_map: Dict[str, List[Dict[str, str]]]):
         """更新聪明钱信息"""
+        # 打印调试信息
+        self.add_log("开始处理智能钱包数据", f"交易数据长度: {len(transactions_data)}")
+        self.add_log("地址标签数据", f"标签数量: {len(address_labels_map)}")
+        
         processed_data = []
         buy_count = 0
         sell_count = 0
         buy_volume = 0
         sell_volume = 0
         
-        self.add_log(f"开始处理{len(transactions_data)}条交易数据")
-        
-        # 保存原始数据到文件
+        # 保存原始数据到文件以便调试
         try:
             with open('smart_money_raw_data.json', 'w', encoding='utf-8') as f:
                 json.dump({
@@ -1062,12 +1067,13 @@ class MainWindow(QMainWindow):
                     'address_labels': address_labels_map
                 }, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            self.add_log("保存原始数据", f"错误 - 无法保存到文件: {str(e)}")
+            self.add_log("保存原始数据失败", f"错误: {str(e)}")
         
+        # 处理每个交易
         for tx in transactions_data:
             for event in tx.get('events', []):
                 address = event.get('address', '')
-                labels = [label.get('label', '') for label in address_labels_map.get(address, [])]
+                labels = address_labels_map.get(address, [])
                 
                 if not labels:  # 如果没有标签，跳过
                     continue
@@ -1090,42 +1096,20 @@ class MainWindow(QMainWindow):
                 
                 processed_data.append({
                     'address': address,
-                    'labels': labels,
+                    'labels': [label.get('label', '') for label in labels],  # 直接获取标签列表
                     'is_buy': is_buy,
                     'price_usd': order.get('price_usd', 0),
                     'volume_native': volume_native
                 })
-        
-        # 保存处理后的数据到文件
-        try:
-            with open('smart_money_processed_data.json', 'w', encoding='utf-8') as f:
-                json.dump({
-                    'processed_data': processed_data,
-                    'summary': {
-                        'buy_count': buy_count,
-                        'sell_count': sell_count,
-                        'buy_volume': buy_volume,
-                        'sell_volume': sell_volume
-                    }
-                }, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            self.add_log("保存处理后数据", f"错误 - 无法保存到文件: {str(e)}")
-        
-        self.add_log(f"处理完成: 买入{buy_count}笔, 卖出{sell_count}笔")
         
         # 更新表格
         if processed_data:
             model = SmartMoneyTableModel(processed_data)
             self.tableSmartMoney.setModel(model)
             self.tableSmartMoney.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-            
-            # 设置表格代理以处理背景色
-            self.tableSmartMoney.setItemDelegate(TableStyleDelegate())
-            
-            # 打印一些调试信息
-            self.add_log("表格数据", f"成功 - 添加了{len(processed_data)}行数据")
+            self.add_log("表格更新完成", f"显示 {len(processed_data)} 条记录")
         else:
-            self.add_log("表格数据", "警告 - 没有可显示的数据")
+            self.add_log("表格更新", "警告 - 没有可显示的数据")
         
         # 更新统计信息
         net_volume = buy_volume - sell_volume
@@ -1142,7 +1126,7 @@ class MainWindow(QMainWindow):
         </html>
         """
         self.labelSmartMoneyInfo.setText(info_html)
-        self.add_log("聪明钱信息更新完成")
+        self.add_log("智能钱包信息更新完成", f"买入: {buy_count}笔, 卖出: {sell_count}笔")
 
     @staticmethod
     def show_error_and_exit(message: str):
