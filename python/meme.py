@@ -1274,6 +1274,10 @@ class MainWindow(QMainWindow):
                 self.history_worker.error.connect(self.on_api_error)
                 self.history_worker.start()
 
+            # 在获取历史记录之前添加
+            self.btnQuery.setEnabled(True)
+            self.btnQuery.setText("查询")
+
     def on_history_data_received(self, history_data, creator, contract_address):
         """处理历史数据"""
         if history_data:
@@ -1316,6 +1320,13 @@ class MainWindow(QMainWindow):
                 self.add_log("获取聪明钱数据", f"错误 - {str(e)}")
                 # 发生错误时也继续获取社交媒体信息
                 self.get_social_media_info(contract_address)
+
+            # 在获取社交媒体信息之前添加
+            self.btnQuery.setEnabled(True)
+            self.btnQuery.setText("查询")
+        else:
+            self.btnQuery.setEnabled(True)
+            self.btnQuery.setText("查询")
 
     def get_social_media_info(self, contract_address):
         """获取社交媒体信息"""
