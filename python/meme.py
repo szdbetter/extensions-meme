@@ -81,6 +81,8 @@ class DevHistoryTableModel(QAbstractTableModel):
         super().__init__(parent)
         self._data = data
         self._headers = ["发币", "成功", "市值", "时间"]
+        self._sort_column = 0  # 默认排序列
+        self._sort_order = Qt.AscendingOrder  # 默认升序
 
     def rowCount(self, parent=QModelIndex()) -> int:
         return len(self._data)
@@ -114,6 +116,23 @@ class DevHistoryTableModel(QAbstractTableModel):
             return self._headers[section]
         return None
 
+    def sort(self, column: int, order: Qt.SortOrder):
+        """实现排序"""
+        self.layoutAboutToBeChanged.emit()
+        
+        if column == 0:  # 发币
+            self._data.sort(key=lambda x: x.get('symbol', ''), reverse=(order == Qt.DescendingOrder))
+        elif column == 1:  # 成功
+            self._data.sort(key=lambda x: x.get('complete', False), reverse=(order == Qt.DescendingOrder))
+        elif column == 2:  # 市值
+            self._data.sort(key=lambda x: x.get('usd_market_cap', 0), reverse=(order == Qt.DescendingOrder))
+        elif column == 3:  # 时间
+            self._data.sort(key=lambda x: x.get('created_timestamp', 0), reverse=(order == Qt.DescendingOrder))
+            
+        self._sort_column = column
+        self._sort_order = order
+        self.layoutChanged.emit()
+
     @staticmethod
     def format_market_cap(value: float) -> str:
         """格式化市值显示"""
@@ -131,6 +150,8 @@ class DevTradeTableModel(QAbstractTableModel):
         self._data = data
         self._headers = ["操作", "From", "To", "价格", "金额", "数量", "时间"]
         self.creator = creator
+        self._sort_column = 0
+        self._sort_order = Qt.AscendingOrder
 
     def rowCount(self, parent=QModelIndex()) -> int:
         return len(self._data)
@@ -179,6 +200,29 @@ class DevTradeTableModel(QAbstractTableModel):
         if orientation == Qt.Horizontal and role == Qt.DisplayRole:
             return self._headers[section]
         return None
+
+    def sort(self, column: int, order: Qt.SortOrder):
+        """实现排序"""
+        self.layoutAboutToBeChanged.emit()
+        
+        if column == 0:  # 操作
+            self._data.sort(key=lambda x: x.get('op', ''), reverse=(order == Qt.DescendingOrder))
+        elif column == 1:  # From
+            self._data.sort(key=lambda x: x.get('from', ''), reverse=(order == Qt.DescendingOrder))
+        elif column == 2:  # To
+            self._data.sort(key=lambda x: x.get('to', ''), reverse=(order == Qt.DescendingOrder))
+        elif column == 3:  # 价格
+            self._data.sort(key=lambda x: x.get('price', 0), reverse=(order == Qt.DescendingOrder))
+        elif column == 4:  # 金额
+            self._data.sort(key=lambda x: x.get('volume', 0), reverse=(order == Qt.DescendingOrder))
+        elif column == 5:  # 数量
+            self._data.sort(key=lambda x: x.get('amount', 0), reverse=(order == Qt.DescendingOrder))
+        elif column == 6:  # 时间
+            self._data.sort(key=lambda x: x.get('time', 0), reverse=(order == Qt.DescendingOrder))
+            
+        self._sort_column = column
+        self._sort_order = order
+        self.layoutChanged.emit()
 
     @staticmethod
     def format_address(address: str) -> str:
@@ -462,6 +506,81 @@ class SmartMoneyTableModel(QAbstractTableModel):
             return self._headers[section]
         return None
 
+class SocialTableModel(QAbstractTableModel):
+    """社交媒体表格模型"""
+    
+    def __init__(self, tweets=None, parent=None):
+        super().__init__(parent)
+        self._tweets = tweets or []
+        self._headers = ["用户名", "蓝标", "浏览", "点赞", "转发", "内容"]
+        self._sort_column = 0
+        self._sort_order = Qt.AscendingOrder
+
+    def rowCount(self, parent=QModelIndex()) -> int:
+        return len(self._tweets)
+
+    def columnCount(self, parent=QModelIndex()) -> int:
+        return len(self._headers)
+
+    def data(self, index: QModelIndex, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+
+        if role == Qt.DisplayRole:
+            tweet = self._tweets[index.row()]
+            col = index.column()
+            user = tweet.get("user", {})
+
+            if col == 0:  # 用户名
+                return f"{user.get('name', '')} (@{user.get('screen_name', '')})"
+            elif col == 1:  # 蓝标
+                return "✓" if user.get("is_blue_verified") else ""
+            elif col == 2:  # 浏览
+                return f"{tweet.get('views', 0):,}"
+            elif col == 3:  # 点赞
+                return f"{tweet.get('favorite_count', 0):,}"
+            elif col == 4:  # 转发
+                return f"{tweet.get('retweet_count', 0):,}"
+            elif col == 5:  # 内容
+                return tweet.get("text", "")
+
+        elif role == Qt.TextAlignmentRole:
+            if index.column() in [2, 3, 4]:  # 数字列右对齐
+                return Qt.AlignRight | Qt.AlignVCenter
+            return Qt.AlignLeft | Qt.AlignVCenter
+
+        elif role == Qt.ForegroundRole:
+            if index.column() == 1:  # 蓝标列使用Twitter蓝色
+                return QColor("#1DA1F2")
+
+        return None
+
+    def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.DisplayRole):
+        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+            return self._headers[section]
+        return None
+
+    def sort(self, column: int, order: Qt.SortOrder):
+        """实现排序"""
+        self.layoutAboutToBeChanged.emit()
+        
+        if column == 0:  # 用户名
+            self._tweets.sort(key=lambda x: x.get("user", {}).get("name", ""), reverse=(order == Qt.DescendingOrder))
+        elif column == 1:  # 蓝标
+            self._tweets.sort(key=lambda x: x.get("user", {}).get("is_blue_verified", False), reverse=(order == Qt.DescendingOrder))
+        elif column == 2:  # 浏览
+            self._tweets.sort(key=lambda x: x.get("views", 0), reverse=(order == Qt.DescendingOrder))
+        elif column == 3:  # 点赞
+            self._tweets.sort(key=lambda x: x.get("favorite_count", 0), reverse=(order == Qt.DescendingOrder))
+        elif column == 4:  # 转发
+            self._tweets.sort(key=lambda x: x.get("retweet_count", 0), reverse=(order == Qt.DescendingOrder))
+        elif column == 5:  # 内容
+            self._tweets.sort(key=lambda x: x.get("text", ""), reverse=(order == Qt.DescendingOrder))
+            
+        self._sort_column = column
+        self._sort_order = order
+        self.layoutChanged.emit()
+
 class HTMLDelegate(QStyledItemDelegate):
     """HTML格式的列表项代理"""
     def paint(self, painter, option, index):
@@ -491,202 +610,6 @@ class HTMLDelegate(QStyledItemDelegate):
         doc = QTextDocument()
         doc.setHtml(options.text)
         return QSize(doc.idealWidth(), doc.size().height())
-
-class TweetModel(QAbstractListModel):
-    """推文数据模型"""
-    def __init__(self, tweets=None):
-        super().__init__()
-        self._tweets = tweets or []
-        print(f"TweetModel initialized with {len(self._tweets)} tweets")  # 调试信息
-
-    def data(self, index, role=Qt.DisplayRole):
-        if not index.isValid() or not (0 <= index.row() < len(self._tweets)):
-            return None
-            
-        tweet = self._tweets[index.row()]
-        
-        if role == Qt.DisplayRole:
-            return tweet
-        elif role == Qt.UserRole:
-            return tweet
-            
-        return None
-            
-    def rowCount(self, parent=QModelIndex()):
-        count = len(self._tweets)
-        print(f"rowCount called, returning {count}")  # 调试信息
-        return count
-
-    def addTweets(self, tweets):
-        if not tweets:
-            print("Warning: Attempting to add empty tweets list")  # 调试信息
-            return
-            
-        print(f"Adding {len(tweets)} tweets to model")  # 调试信息
-        self.beginInsertRows(QModelIndex(), 0, len(tweets)-1)
-        self._tweets = tweets
-        self.endInsertRows()
-        print(f"Model now has {len(self._tweets)} tweets")  # 调试信息
-
-class TweetItemDelegate(QStyledItemDelegate):
-    """推文项代理"""
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.parent = parent
-        self.last_clicked_link = None
-
-    def editorEvent(self, event, model, option, index):
-        """处理鼠标事件"""
-        if event.type() == QEvent.MouseButtonRelease:
-            tweet = index.data(Qt.UserRole)
-            if not tweet:
-                return False
-
-            # 获取点击位置
-            pos = event.pos()
-            
-            # 计算链接图标的位置（右上角）
-            link_rect = QRect(option.rect.right() - 20, option.rect.top() + 10, 15, 15)
-            
-            # 检查是否点击了链接图标
-            if link_rect.contains(pos):
-                tweet_id = tweet.get("tweet_id", "")
-                user_screen_name = tweet.get("user", {}).get("screen_name", "")
-                if tweet_id and user_screen_name:
-                    url = QUrl(f"https://twitter.com/{user_screen_name}/status/{tweet_id}")
-                    QDesktopServices.openUrl(url)
-                    return True
-                    
-        return False  # 不再调用父类方法，禁止其他区域的点击事件
-
-    def paint(self, painter, option, index):
-        if not index.isValid():
-            return
-            
-        try:
-            tweet = index.data(Qt.UserRole)
-            if not tweet:
-                return
-                
-            # 设置背景
-            if option.state & QStyle.State_Selected:
-                painter.fillRect(option.rect, option.palette.highlight())
-            elif option.state & QStyle.State_MouseOver:
-                painter.fillRect(option.rect, QColor("#f8f9fa"))
-            else:
-                painter.fillRect(option.rect, QColor("#ffffff"))
-                
-            # 创建文档
-            doc = QTextDocument()
-            
-            # 获取发推时间
-            created_at = tweet.get("created_at", "0")
-            try:
-                timestamp = int(float(created_at)) * 1000
-                time_diff = TimeUtil.get_time_diff(timestamp)
-            except:
-                time_diff = ""
-            
-            # 构建HTML内容
-            html = f"""
-            <div style='margin: 10px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;'>
-                <div style='margin-bottom: 5px;'>
-                    <div style='display: flex; align-items: center; justify-content: space-between;'>
-                        <div style='display: flex; align-items: center;'>
-                            <span style='font-weight: bold; font-size: 15px;'>{tweet.get("user", {}).get("name", "")}</span>
-                            <span style='color: #657786; font-size: 15px; margin-left: 4px;'>
-                                @{tweet.get("user", {}).get("screen_name", "")}
-                                {' <span style="color: #1DA1F2; font-weight: bold;">✓</span>' if tweet.get("user", {}).get("is_blue_verified") else ""}
-                            </span>
-                            <span style='color: #657786; font-size: 13px; margin-left: 8px;'>
-                                · {time_diff}
-                            </span>
-                        </div>
-                        <span style='color: #1DA1F2; font-size: 12px; cursor: pointer;'>🔗</span>
-                    </div>
-                    <div style='color: #657786; font-size: 14px; display: flex; align-items: center;'>
-                        <span>{tweet.get("user", {}).get("followers_count", 0):,} 关注者</span>
-                        <span style='margin-left: 15px;'>🔄 {tweet.get("retweet_count", 0):,}</span>
-                        <span style='margin-left: 15px;'>❤️ {tweet.get("favorite_count", 0):,}</span>
-                        <span style='margin-left: 15px;'>👁️ {tweet.get("views", 0):,}</span>
-                    </div>
-                </div>
-                <div style='color: #14171a; font-size: 15px; line-height: 1.4; margin: 8px 0;'>{tweet.get("text", "")}</div>
-                {"<div style='margin: 8px 0;'><img src='" + tweet["medias"][0]["image_url"] + "' width='100%' style='border-radius: 8px; margin: 5px 0;'/></div>" 
-                 if tweet.get("medias") and tweet["medias"][0].get("image_url") else ""}
-            </div>
-            """
-            doc.setHtml(html)
-            
-            # 设置文档宽度
-            doc.setTextWidth(option.rect.width())
-            
-            # 绘制内容
-            painter.save()
-            painter.translate(option.rect.topLeft())
-            doc.drawContents(painter)
-            painter.restore()
-            
-        except Exception as e:
-            print(f"Error painting tweet: {str(e)}")
-
-    def sizeHint(self, option, index):
-        try:
-            tweet = index.data(Qt.UserRole)
-            if not tweet:
-                return QSize(0, 0)
-                
-            doc = QTextDocument()
-            
-            # 获取发推时间
-            created_at = tweet.get("created_at", "0")
-            try:
-                timestamp = int(float(created_at)) * 1000
-                time_diff = TimeUtil.get_time_diff(timestamp)
-            except:
-                time_diff = ""
-            
-            html = f"""
-            <div style='margin: 10px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;'>
-                <div style='margin-bottom: 5px;'>
-                    <div style='display: flex; align-items: center; justify-content: space-between;'>
-                        <div style='display: flex; align-items: center;'>
-                            <span style='font-weight: bold; font-size: 15px;'>{tweet.get("user", {}).get("name", "")}</span>
-                            <span style='color: #657786; font-size: 15px; margin-left: 4px;'>
-                                @{tweet.get("user", {}).get("screen_name", "")}
-                                {' <span style="color: #1DA1F2; font-weight: bold;">✓</span>' if tweet.get("user", {}).get("is_blue_verified") else ""}
-                            </span>
-                            <span style='color: #657786; font-size: 13px; margin-left: 8px;'>
-                                · {time_diff}
-                            </span>
-                        </div>
-                        <span style='color: #1DA1F2; font-size: 12px; cursor: pointer;'>🔗</span>
-                    </div>
-                    <div style='color: #657786; font-size: 14px; display: flex; align-items: center;'>
-                        <span>{tweet.get("user", {}).get("followers_count", 0):,} 关注者</span>
-                        <span style='margin-left: 15px;'>🔄 {tweet.get("retweet_count", 0):,}</span>
-                        <span style='margin-left: 15px;'>❤️ {tweet.get("favorite_count", 0):,}</span>
-                        <span style='margin-left: 15px;'>👁️ {tweet.get("views", 0):,}</span>
-                    </div>
-                </div>
-                <div style='color: #14171a; font-size: 15px; line-height: 1.4; margin: 8px 0;'>{tweet.get("text", "")}</div>
-                {"<div style='margin: 8px 0;'><img src='" + tweet["medias"][0]["image_url"] + "' width='100%' style='border-radius: 8px; margin: 5px 0;'/></div>" 
-                 if tweet.get("medias") and tweet["medias"][0].get("image_url") else ""}
-            </div>
-            """
-            doc.setHtml(html)
-            doc.setTextWidth(option.rect.width())
-            
-            # 计算高度（基础高度 + 图片高度）
-            height = doc.size().height()
-            if tweet.get("medias") and tweet["medias"][0].get("image_url"):
-                height += 200  # 图片固定高度
-                
-            return QSize(option.rect.width(), int(height) + 20)
-            
-        except Exception as e:
-            print(f"Error calculating size hint: {str(e)}")
-            return QSize(option.rect.width(), 100)  # 返回默认大小
 
 class HeadlessBrowser:
     """无头浏览器工具类，用于处理需要浏览器环境的API请求"""
@@ -908,6 +831,7 @@ class MainWindow(QMainWindow):
             'tableDevHistory': (QTableView, '开发者历史表格'),
             'tableDevTrade': (QTableView, '开发者交易表格'),
             'tableSmartMoney': (QTableView, '聪明钱交易表格'),
+            'tableSocial': (QTableView, '社交媒体表格'),
             'labelSmartMoneyInfo': (QLabel, '聪明钱统计信息'),
             'listViewLog': (QListView, '日志列表'),
             'labelCoinPic': (QLabel, '代币图片'),
@@ -919,7 +843,6 @@ class MainWindow(QMainWindow):
             'labelViews': (QLabel, '浏览标签'),
             'labelOfficalTweets': (QLabel, '官方推文标签'),
             'labelSmartBuy': (QLabel, '智能买入标签'),
-            'listViewSocial': (QListView, '推文列表'),
         }
 
         # 检查每个控件
@@ -969,10 +892,35 @@ class MainWindow(QMainWindow):
 
         # 设置表格样式，与Material主题配合
         table_delegate = TableStyleDelegate()
-        for table in [self.tableDevHistory, self.tableDevTrade]:
+        for table in [self.tableDevHistory, self.tableDevTrade, self.tableSocial]:
             table.setItemDelegate(table_delegate)
             table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-            # 移除之前的表格样式，使用Material主题样式
+            # 启用表格排序
+            table.setSortingEnabled(True)
+            # 设置表格样式
+            table.setStyleSheet("""
+                QTableView {
+                    border: 1px solid #dcdcdc;
+                    background-color: white;
+                    gridline-color: #f0f0f0;
+                }
+                QTableView::item {
+                    padding: 5px;
+                }
+                QTableView::item:hover {
+                    background-color: #f8f9fa;
+                }
+                QHeaderView::section {
+                    background-color: #f8f9fa;
+                    padding: 5px;
+                    border: none;
+                    border-right: 1px solid #dcdcdc;
+                    border-bottom: 1px solid #dcdcdc;
+                }
+                QHeaderView::section:hover {
+                    background-color: #e3f2fd;
+                }
+            """)
 
         # 设置列表视图样式，与Material主题配合
         self.listViewLog.setProperty('class', 'dense')  # 使用Material主题的紧凑列表样式
@@ -1199,12 +1147,36 @@ class MainWindow(QMainWindow):
         self.listViewLog.setItemDelegate(HTMLDelegate(self.listViewLog))  # 使用HTML代理
         self.listViewLog.scrollToTop()
 
+    def clear_previous_results(self):
+        """清空上次查询的结果"""
+        # 清空表格
+        self.tableDevTrade.setModel(None)
+        self.tableDevHistory.setModel(None)
+        
+        # 清空标签
+        self.labelDevInfo.clear()
+        self.labelDevHistory.clear()
+        self.labelDevTrade.clear()
+        self.labelFilterTweets.clear()
+        self.labelFollowers.clear()
+        self.labelLikes.clear()
+        self.labelViews.clear()
+        self.labelOfficalTweets.clear()
+        self.labelSmartBuy.clear()
+        self.labelCoinDescription.clear()
+        self.labelCoinSymbol.clear()
+        self.labelCoinPic.clear()
+        self.labelSmartMoneyInfo.clear()
+
     def query_coin_info(self):
         """查询代币信息"""
         contract_address = self.leCA.text().strip()
         if not contract_address:
             self.show_error_message("请输入代币合约地址")
             return
+
+        # 清空上次查询结果
+        self.clear_previous_results()
 
         # 禁用查询按钮
         self.btnQuery.setEnabled(False)
@@ -1213,13 +1185,13 @@ class MainWindow(QMainWindow):
         # 添加日志
         self.add_log("开始查询代币信息", f"合约地址: {contract_address}", f"https://gmgn.ai/sol/token/{contract_address}")
 
-        # 创建异步工作线程获取代币数据
+        # 1. 创建异步工作线程获取代币数据
         self.coin_worker = ApiWorker(CoinDataFetcher.fetch_coin_data, contract_address)
-        self.coin_worker.finished.connect(self.on_coin_data_received)
+        self.coin_worker.finished.connect(lambda data: self.on_coin_data_received(data, contract_address))
         self.coin_worker.error.connect(self.on_api_error)
         self.coin_worker.start()
 
-    def on_coin_data_received(self, coin_data):
+    def on_coin_data_received(self, coin_data, contract_address):
         """处理代币数据"""
         if coin_data:
             # 添加日志
@@ -1230,42 +1202,20 @@ class MainWindow(QMainWindow):
             # 更新代币相关标签
             self.update_coin_labels(coin_data)
 
-            # 获取社交媒体信息
-            contract = coin_data.get('mint', '')
-            if contract:
-                # 获取社交统计信息
-                url = f"https://www.pump.news/api/trpc/analyze.getBatchTokenDataByTokenAddress,watchlist.batchTokenWatchState?batch=1&input=%7B%220%22%3A%7B%22json%22%3A%7B%22tokenAddresses%22%3A%5B%22{contract}%22%5D%7D%7D%2C%221%22%3A%7B%22json%22%3A%7B%22tokenAddresses%22%3A%5B%22{contract}%22%5D%7D%7D%7D"
-                
-                self.social_worker = ApiWorker(requests.get, url)
-                self.social_worker.finished.connect(lambda response: self.update_social_info(response.json()))
-                self.social_worker.error.connect(self.on_api_error)
-                self.social_worker.start()
-                
-                # 获取推文列表
-                tweets_url = f"https://www.pump.news/api/trpc/utils.getCannyList,service.getServiceCallCount,tweets.getTweetsByTokenAddress?batch=1&input=%7B%220%22%3A%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D%2C%221%22%3A%7B%22json%22%3A%7B%22service%22%3A%22optimize%22%7D%7D%2C%222%22%3A%7B%22json%22%3A%7B%22tokenAddress%22%3A%22{contract}%22%2C%22type%22%3A%22filter%22%2C%22category%22%3A%22top%22%7D%7D%7D"
-                
-                self.tweets_worker = ApiWorker(requests.get, tweets_url)
-                self.tweets_worker.finished.connect(lambda response: self.update_tweets(response.json()))
-                self.tweets_worker.error.connect(self.on_api_error)
-                self.tweets_worker.start()
-
-            # 异步获取开发者信息
+            # 2. 获取开发者交易记录
             creator = coin_data.get('creator')
             if creator:
-                # 先获取交易记录
                 self.add_log("请求开发者交易记录", "正在获取...", f"https://gmgn.ai/sol/address/{creator}")
                 self.trade_worker = ApiWorker(DevDataFetcher.fetch_dev_trades, coin_data.get('mint', ''))
-                self.trade_worker.finished.connect(lambda data: self.on_trade_data_received(data, creator))
+                self.trade_worker.finished.connect(lambda data: self.on_trade_data_received(data, creator, contract_address))
                 self.trade_worker.error.connect(self.on_api_error)
                 self.trade_worker.start()
         else:
             self.add_log("获取代币信息", "失败 - 未找到代币信息或发生错误")
+            self.btnQuery.setEnabled(True)
+            self.btnQuery.setText("查询")
 
-        # 恢复查询按钮
-        self.btnQuery.setEnabled(True)
-        self.btnQuery.setText("查询")
-
-    def on_trade_data_received(self, trade_data, creator):
+    def on_trade_data_received(self, trade_data, creator, contract_address):
         """处理交易数据"""
         if trade_data:
             self.labelDevTrade.setText(f"交易信息（{DevDataFetcher.format_dev_trade_status(trade_data)}）")
@@ -1275,14 +1225,14 @@ class MainWindow(QMainWindow):
                 trade_model = DevTradeTableModel(trade_data['transactions'], creator)
                 self.tableDevTrade.setModel(trade_model)
 
-                # 获取历史记录
+                # 3. 获取开发者历史记录
                 self.add_log("请求开发者历史记录", "正在获取...", f"https://gmgn.ai/sol/address/{creator}")
                 self.history_worker = ApiWorker(DevDataFetcher.fetch_dev_history, creator)
-                self.history_worker.finished.connect(lambda data: self.on_history_data_received(data, creator))
+                self.history_worker.finished.connect(lambda data: self.on_history_data_received(data, creator, contract_address))
                 self.history_worker.error.connect(self.on_api_error)
                 self.history_worker.start()
 
-    def on_history_data_received(self, history_data, creator):
+    def on_history_data_received(self, history_data, creator, contract_address):
         """处理历史数据"""
         if history_data:
             self.add_log("获取开发者历史记录", f"成功 - {len(history_data)}条记录")
@@ -1304,56 +1254,129 @@ class MainWindow(QMainWindow):
             history_model = DevHistoryTableModel(sorted_history)
             self.tableDevHistory.setModel(history_model)
 
-            # 开始获取聪明钱数据
+            # 4. 获取聪明钱数据
             self.add_log("请求聪明钱信息", "正在获取...", "https://chain.fm")
-            contract_address = self.leCA.text().strip()
-
             try:
-                # 使用Node.js服务获取数据
                 data = NodeService.fetch_chain_fm_data(contract_address)
-                
                 if data and len(data) > 0:
                     result = data[0].get('result', {})
                     transactions = result.get('data', {}).get('json', {}).get('data', {}).get('parsedTransactions', [])
-                    address_labels = result['data']['json']['data']['renderContext']['addressLabelsMap']
-
-                    self.add_log("获取聪明钱数据", f"成功 - 获取到{len(transactions)}条交易记录，{len(address_labels)}个地址标签")
+                    address_labels = result['data']['json']['data']['data'][0]['renderContext']['addressLabelsMap']
                     self.update_smart_money_info(transactions, address_labels)
+                    
+                    # 5. 获取社交媒体信息
+                    self.get_social_media_info(contract_address)
                 else:
                     self.add_log("获取聪明钱数据", "失败 - 返回数据为空")
-                    
+                    # 即使聪明钱数据为空，也继续获取社交媒体信息
+                    self.get_social_media_info(contract_address)
             except Exception as e:
                 self.add_log("获取聪明钱数据", f"错误 - {str(e)}")
-                self.show_error_message(f"获取聪明钱数据失败：{str(e)}")
+                # 发生错误时也继续获取社交媒体信息
+                self.get_social_media_info(contract_address)
 
-    def on_api_error(self, error_msg):
-        """处理API错误"""
-        self.add_log("API请求错误", f"错误 - {error_msg}")
-        self.btnQuery.setEnabled(True)
-        self.btnQuery.setText("查询")
+    def get_social_media_info(self, contract_address):
+        """获取社交媒体信息"""
+        # 获取社交统计信息
+        url = f"https://www.pump.news/api/trpc/analyze.getBatchTokenDataByTokenAddress,watchlist.batchTokenWatchState?batch=1&input=%7B%220%22%3A%7B%22json%22%3A%7B%22tokenAddresses%22%3A%5B%22{contract_address}%22%5D%7D%7D%2C%221%22%3A%7B%22json%22%3A%7B%22tokenAddresses%22%3A%5B%22{contract_address}%22%5D%7D%7D%7D"
+        
+        self.social_worker = ApiWorker(requests.get, url)
+        self.social_worker.finished.connect(lambda response: self.update_social_info(response.json()))
+        self.social_worker.error.connect(self.on_api_error)
+        self.social_worker.start()
+        
+        # 获取推文列表
+        tweets_url = f"https://www.pump.news/api/trpc/utils.getCannyList,service.getServiceCallCount,tweets.getTweetsByTokenAddress?batch=1&input=%7B%220%22%3A%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D%2C%221%22%3A%7B%22json%22%3A%7B%22service%22%3A%22optimize%22%7D%7D%2C%222%22%3A%7B%22json%22%3A%7B%22tokenAddress%22%3A%22{contract_address}%22%2C%22type%22%3A%22filter%22%2C%22category%22%3A%22top%22%7D%7D%7D"
+        
+        self.tweets_worker = ApiWorker(requests.get, tweets_url)
+        self.tweets_worker.finished.connect(lambda response: self.update_tweets(response.json()))
+        self.tweets_worker.error.connect(self.on_api_error)
+        self.tweets_worker.start()
 
-    def show_error_message(self, message: str):
-        """显示错误信息"""
-        error_html = f"""
-        <html>
-        <head>
-        <style type="text/css">
-            .error-message {{
-                color: #e74c3c;
-                font-family: Arial, sans-serif;
-                padding: 10px;
-                font-size: 14px;
-            }}
-        </style>
-        </head>
-        <body>
-            <div class='error-message'>
-                {message}
-            </div>
-        </body>
-        </html>
-        """
-        # 移除 self.txtCoinInfo.setHtml(error_html)
+    def update_social_info(self, data):
+        """更新社交信息"""
+        try:
+            # 更新统计数据
+            stats = data[0]["result"]["data"]["json"]["data"]["data"][0]["stats"]
+            self.labelFilterTweets.setText(f"推文数：{stats['filter_tweets']}")
+            self.labelFollowers.setText(f"触达人数：{stats['followers']:,}人")
+            self.labelLikes.setText(f"点赞：{stats['likes']:,}")
+            self.labelViews.setText(f"浏览：{stats['views']:,}")
+            self.labelOfficalTweets.setText(f"官方推文：{stats['official_tweets']}")
+            self.labelSmartBuy.setText(f"智能买入：{data[0]['result']['data']['json']['data']['data'][0]['smartbuy']}")
+            
+            # 更新描述
+            summary = data[0]["result"]["data"]["json"]["data"]["data"][0]["analysis"]["lang-zh-CN"]["summary"]
+            self.labelCoinDescription.setText(summary)
+            
+        except Exception as e:
+            self.add_log("更新社交统计信息", f"错误 - {str(e)}")
+
+    def update_tweets(self, tweets_data):
+        """更新推文信息"""
+        try:
+            if not tweets_data or not isinstance(tweets_data, list) or len(tweets_data) < 3:
+                self.add_log("更新推文列表", f"错误 - 无效的推文数据格式")
+                return
+
+            tweets = tweets_data[2]["result"]["data"]["json"]["data"]["data"]["tweets"]
+            if not tweets:
+                self.add_log("更新推文列表", "警告 - 没有找到推文数据")
+                return
+
+            self.add_log("推文列表", f"成功获取 {len(tweets)} 条推文")
+
+            # 更新社交媒体表格
+            model = SocialTableModel(tweets)
+            self.tableSocial.setModel(model)
+            
+            # 设置列宽
+            header = self.tableSocial.horizontalHeader()
+            header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # 用户名列
+            header.setSectionResizeMode(1, QHeaderView.Fixed)  # 蓝标列
+            header.setDefaultSectionSize(40)  # 蓝标列宽度
+            header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # 浏览列
+            header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # 点赞列
+            header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # 转发列
+            header.setSectionResizeMode(5, QHeaderView.Stretch)  # 内容列
+
+            # 设置表格样式
+            self.tableSocial.setStyleSheet("""
+                QTableView {
+                    border: 1px solid #dcdcdc;
+                    background-color: white;
+                    gridline-color: #f0f0f0;
+                }
+                QTableView::item {
+                    padding: 5px;
+                }
+                QTableView::item:hover {
+                    background-color: #f8f9fa;
+                }
+                QHeaderView::section {
+                    background-color: #f8f9fa;
+                    padding: 5px;
+                    border: none;
+                    border-right: 1px solid #dcdcdc;
+                    border-bottom: 1px solid #dcdcdc;
+                }
+            """)
+
+            # 添加点击事件处理
+            self.tableSocial.clicked.connect(self.on_social_table_clicked)
+
+        except Exception as e:
+            self.add_log("更新推文列表", f"错误 - {str(e)}")
+
+    def on_social_table_clicked(self, index):
+        """处理社交媒体表格点击事件"""
+        if index.column() == 5:  # 内容列
+            tweet = self.tableSocial.model()._tweets[index.row()]
+            tweet_id = tweet.get("tweet_id")
+            user_screen_name = tweet.get("user", {}).get("screen_name")
+            if tweet_id and user_screen_name:
+                url = f"https://twitter.com/{user_screen_name}/status/{tweet_id}"
+                QDesktopServices.openUrl(QUrl(url))
 
     def update_coin_labels(self, coin_data: Dict[str, Any]):
         """更新代币相关标签"""
@@ -1510,101 +1533,15 @@ class MainWindow(QMainWindow):
         self.labelSmartMoneyInfo.setText(info_html)
         self.add_log("聪明钱信息更新完成")
 
-    def update_social_info(self, data):
-        """更新社交信息"""
-        try:
-            # 更新统计数据
-            stats = data[0]["result"]["data"]["json"]["data"]["data"][0]["stats"]
-            self.labelFilterTweets.setText(f"推文数：{stats['filter_tweets']}")
-            self.labelFollowers.setText(f"关注者：{stats['followers']:,}")
-            self.labelLikes.setText(f"点赞：{stats['likes']:,}")
-            self.labelViews.setText(f"浏览：{stats['views']:,}")
-            self.labelOfficalTweets.setText(f"官方推文：{stats['official_tweets']}")
-            self.labelSmartBuy.setText(f"智能买入：{data[0]['result']['data']['json']['data']['data'][0]['smartbuy']}")
-            
-            # 更新描述
-            summary = data[0]["result"]["data"]["json"]["data"]["data"][0]["analysis"]["lang-zh-CN"]["summary"]
-            self.labelCoinDescription.setText(summary)
-            
-        except Exception as e:
-            self.add_log("更新社交统计信息", f"错误 - {str(e)}")
+    def on_api_error(self, error_msg):
+        """处理API错误"""
+        self.add_log("API请求错误", f"错误 - {error_msg}")
+        self.btnQuery.setEnabled(True)
+        self.btnQuery.setText("查询")
 
-    def update_tweets(self, tweets_data):
-        """更新推文列表"""
-        try:
-            # 检查tweets_data是否有效
-            if not tweets_data or not isinstance(tweets_data, list) or len(tweets_data) < 3:
-                self.add_log("更新推文列表", f"错误 - 无效的推文数据格式")
-                return
-
-            # 获取推文数据 - 修改数据访问路径
-            tweets = tweets_data[2]["result"]["data"]["json"]["data"]["data"]["tweets"]
-            if not tweets:
-                self.add_log("更新推文列表", "警告 - 没有找到推文数据")
-                return
-            self.add_log("推文列表", f"成功获取 {len(tweets)} 条推文")
-
-            # 设置代理和模型
-            try:
-                if not hasattr(self, 'tweet_model'):
-                    self.tweet_model = TweetModel()
-                    self.listViewSocial.setModel(self.tweet_model)
-                    self.listViewSocial.setItemDelegate(TweetItemDelegate())
-                    self.listViewSocial.clicked.connect(self.on_tweet_clicked)
-                    self.add_log("推文列表", "初始化模型和代理成功")
-            except Exception as model_error:
-                self.add_log("更新推文列表", f"错误 - 设置模型和代理失败: {str(model_error)}")
-                return
-
-            # 更新模型数据
-            try:
-                self.tweet_model.addTweets(tweets)
-                self.add_log("推文列表", "成功更新推文数据到模型")
-            except Exception as update_error:
-                self.add_log("更新推文列表", f"错误 - 更新模型数据失败: {str(update_error)}")
-                return
-
-            # 设置样式
-            try:
-                self.listViewSocial.setStyleSheet("""
-                    QListView {
-                        background-color: white;
-                        border: 1px solid #dcdcdc;
-                        border-radius: 4px;
-                        padding: 5px;
-                    }
-                    QListView::item {
-                        border-bottom: 1px solid #f0f0f0;
-                        padding: 5px;
-                        margin: 2px 0;
-                    }
-                    QListView::item:hover {
-                        background-color: #f8f9fa;
-                    }
-                    QListView::item:selected {
-                        background-color: #e3f2fd;
-                        color: black;
-                    }
-                """)
-                self.add_log("推文列表", "成功设置样式")
-            except Exception as style_error:
-                self.add_log("更新推文列表", f"错误 - 设置样式失败: {str(style_error)}")
-                return
-
-        except Exception as e:
-            import traceback
-            error_details = traceback.format_exc()
-            self.add_log("更新推文列表", f"错误 - {str(e)}\n{error_details}")
-
-    def on_tweet_clicked(self, index):
-        """处理推文点击事件"""
-        tweet = index.data(Qt.UserRole)
-        if tweet:
-            tweet_id = tweet.get("tweet_id")
-            user_screen_name = tweet.get("user", {}).get("screen_name")
-            if tweet_id and user_screen_name:
-                url = f"https://twitter.com/{user_screen_name}/status/{tweet_id}"
-                QDesktopServices.openUrl(QUrl(url))
+    def show_error_message(self, message: str):
+        """显示错误信息"""
+        self.add_log("错误", message, "")
 
     @staticmethod
     def show_error_and_exit(message: str):
