@@ -596,7 +596,7 @@ class TweetItemDelegate(QStyledItemDelegate):
                             <span style='font-weight: bold; font-size: 15px;'>{tweet.get("user", {}).get("name", "")}</span>
                             <span style='color: #657786; font-size: 15px; margin-left: 4px;'>
                                 @{tweet.get("user", {}).get("screen_name", "")}
-                                {' <span style="color: #1DA1F2;">✓</span>' if tweet.get("user", {}).get("is_blue_verified") else ""}
+                                {' <span style="color: #1DA1F2; font-weight: bold;">✓</span>' if tweet.get("user", {}).get("is_blue_verified") else ""}
                             </span>
                             <span style='color: #657786; font-size: 13px; margin-left: 8px;'>
                                 · {time_diff}
@@ -654,7 +654,7 @@ class TweetItemDelegate(QStyledItemDelegate):
                             <span style='font-weight: bold; font-size: 15px;'>{tweet.get("user", {}).get("name", "")}</span>
                             <span style='color: #657786; font-size: 15px; margin-left: 4px;'>
                                 @{tweet.get("user", {}).get("screen_name", "")}
-                                {' <span style="color: #1DA1F2;">✓</span>' if tweet.get("user", {}).get("is_blue_verified") else ""}
+                                {' <span style="color: #1DA1F2; font-weight: bold;">✓</span>' if tweet.get("user", {}).get("is_blue_verified") else ""}
                             </span>
                             <span style='color: #657786; font-size: 13px; margin-left: 8px;'>
                                 · {time_diff}
