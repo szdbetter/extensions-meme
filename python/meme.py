@@ -7,7 +7,7 @@ Solana代币信息查询工具
 
 from PySide6.QtWidgets import (QApplication, QMainWindow, QPushButton, QLineEdit,
                              QTextEdit, QLabel, QTableView, QStyledItemDelegate, QStyle, QHeaderView,
-                             QListView, QStyleOptionViewItem)
+                             QListView, QStyleOptionViewItem, QTabWidget)
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtCore import (Qt, QCoreApplication, QAbstractTableModel, QModelIndex, QThread, Signal,
                          QDateTime, QSize, QUrl, QAbstractListModel, QEvent, QRect)
@@ -23,6 +23,7 @@ from typing import Optional, Dict, Any, List
 import json
 import base64
 import locale
+import urllib.parse
 
 # 设置Qt属性
 QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
@@ -119,7 +120,7 @@ class DevHistoryTableModel(QAbstractTableModel):
     def sort(self, column: int, order: Qt.SortOrder):
         """实现排序"""
         self.layoutAboutToBeChanged.emit()
-        
+
         if column == 0:  # 发币
             self._data.sort(key=lambda x: x.get('symbol', ''), reverse=(order == Qt.DescendingOrder))
         elif column == 1:  # 成功
@@ -128,7 +129,7 @@ class DevHistoryTableModel(QAbstractTableModel):
             self._data.sort(key=lambda x: x.get('usd_market_cap', 0), reverse=(order == Qt.DescendingOrder))
         elif column == 3:  # 时间
             self._data.sort(key=lambda x: x.get('created_timestamp', 0), reverse=(order == Qt.DescendingOrder))
-            
+
         self._sort_column = column
         self._sort_order = order
         self.layoutChanged.emit()
@@ -204,7 +205,7 @@ class DevTradeTableModel(QAbstractTableModel):
     def sort(self, column: int, order: Qt.SortOrder):
         """实现排序"""
         self.layoutAboutToBeChanged.emit()
-        
+
         if column == 0:  # 操作
             self._data.sort(key=lambda x: x.get('op', ''), reverse=(order == Qt.DescendingOrder))
         elif column == 1:  # From
@@ -219,7 +220,7 @@ class DevTradeTableModel(QAbstractTableModel):
             self._data.sort(key=lambda x: x.get('amount', 0), reverse=(order == Qt.DescendingOrder))
         elif column == 6:  # 时间
             self._data.sort(key=lambda x: x.get('time', 0), reverse=(order == Qt.DescendingOrder))
-            
+
         self._sort_column = column
         self._sort_order = order
         self.layoutChanged.emit()
@@ -508,7 +509,7 @@ class SmartMoneyTableModel(QAbstractTableModel):
 
 class SocialTableModel(QAbstractTableModel):
     """社交媒体表格模型"""
-    
+
     def __init__(self, tweets=None, parent=None):
         super().__init__(parent)
         self._tweets = tweets or []
@@ -563,7 +564,7 @@ class SocialTableModel(QAbstractTableModel):
     def sort(self, column: int, order: Qt.SortOrder):
         """实现排序"""
         self.layoutAboutToBeChanged.emit()
-        
+
         if column == 0:  # 用户名
             self._tweets.sort(key=lambda x: x.get("user", {}).get("name", ""), reverse=(order == Qt.DescendingOrder))
         elif column == 1:  # 蓝标
@@ -576,7 +577,7 @@ class SocialTableModel(QAbstractTableModel):
             self._tweets.sort(key=lambda x: x.get("retweet_count", 0), reverse=(order == Qt.DescendingOrder))
         elif column == 5:  # 内容
             self._tweets.sort(key=lambda x: x.get("text", ""), reverse=(order == Qt.DescendingOrder))
-            
+
         self._sort_column = column
         self._sort_order = order
         self.layoutChanged.emit()
@@ -613,23 +614,23 @@ class HTMLDelegate(QStyledItemDelegate):
 
 class HeadlessBrowser:
     """无头浏览器工具类，用于处理需要浏览器环境的API请求"""
-    
+
     @staticmethod
     async def login_chain_fm(page):
         """登录Chain.fm"""
         try:
             # 访问登录页面
             await page.goto('https://chain.fm/login')
-            
+
             # 等待登录按钮出现
             await page.waitForSelector('button[data-provider="google"]')
-            
+
             # 点击Google登录按钮
             await page.click('button[data-provider="google"]')
-            
+
             # 等待登录完成，这里需要等待URL变化
             await page.waitForNavigation()
-            
+
             # 检查是否登录成功
             current_url = page.url
             if 'chain.fm' in current_url and 'login' not in current_url:
@@ -638,73 +639,73 @@ class HeadlessBrowser:
             else:
                 print("登录失败")
                 return False
-                
+
         except Exception as e:
             print(f"登录过程出错: {str(e)}")
             return False
-    
+
     @staticmethod
     async def fetch_with_puppeteer(url: str) -> Optional[Dict]:
         """
         使用Puppeteer无头浏览器获取API数据
-        
+
         Args:
             url: API地址
-            
+
         Returns:
             Optional[Dict]: API返回的数据或None（如果获取失败）
         """
         try:
             import asyncio
             from pyppeteer import launch
-            
+
             # 启动浏览器，这里设置为非无头模式以便调试
             browser = await launch(
                 headless=False,  # 设置为False以便查看浏览器操作
                 args=['--no-sandbox', '--disable-setuid-sandbox']
             )
-            
+
             # 创建新页面
             page = await browser.newPage()
-            
+
             # 设置页面视口
             await page.setViewport({'width': 1920, 'height': 1080})
-            
+
             # 设置用户代理
             await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36')
-            
+
             # 先进行登录
             login_success = await HeadlessBrowser.login_chain_fm(page)
             if not login_success:
                 await browser.close()
                 return None
-            
+
             # 访问API URL
             response = await page.goto(url)
-            
+
             # 等待页面加载完成
             await page.waitForSelector('body')
-            
+
             # 获取响应内容
             content = await response.json()
-            
+
             # 关闭浏览器
             await browser.close()
-            
+
             return content
-            
+
         except Exception as e:
             print(f"Puppeteer请求失败: {str(e)}")
             return None
-            
+
     @staticmethod
     def fetch_api_data(url: str) -> Optional[Dict]:
         """
         同步方式调用Puppeteer获取API数据
-        
+
         Args:
             url: API地址
-            
+
         Returns:
             Optional[Dict]: API返回的数据或None（如果获取失败）
         """
@@ -712,33 +713,33 @@ class HeadlessBrowser:
             import asyncio
             if sys.platform == 'win32':
                 asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-            
+
             loop = asyncio.get_event_loop()
             return loop.run_until_complete(HeadlessBrowser.fetch_with_puppeteer(url))
-            
+
         except Exception as e:
             print(f"获取API数据失败: {str(e)}")
             return None
 
 class NodeService:
     """Node.js服务交互类"""
-    
+
     BASE_URL = "http://localhost:3000"
-    
+
     @staticmethod
     def fetch_chain_fm_data(contract_address: str) -> Optional[Dict]:
         """
         从本地Node.js服务获取Chain.fm数据
-        
+
         Args:
             contract_address: 代币合约地址
-            
+
         Returns:
             Optional[Dict]: API返回的数据或None（如果获取失败）
         """
         try:
             url = "https://chain.fm/api/trpc/parsedTransaction.list"
-            
+
             # 构建batch请求格式
             batch_input = {
                 "0": {
@@ -761,27 +762,57 @@ class NodeService:
                     }
                 }
             }
-            
+
             # 构建完整的URL
             full_url = f"{url}?batch=1&input={json.dumps(batch_input)}"
-            
+
             response = requests.post(NodeService.BASE_URL, json={
                 "url": full_url,
                 "dataType": "chain_fm_transactions"
             })
-            
+
             response.raise_for_status()
             result = response.json()
-            
+
             if result.get('success'):
                 return result.get('response', {}).get('data', [])
             else:
                 print(f"获取数据失败: {result.get('error')}")
                 return None
-                
+
         except Exception as e:
             print(f"从Node.js服务获取数据失败: {str(e)}")
             return None
+
+class NoDataTableModel(QAbstractTableModel):
+    """无数据时的表格模型"""
+
+    def __init__(self, message="暂无数据", parent=None):
+        super().__init__(parent)
+        self._message = message
+        self._headers = ["提示"]
+
+    def rowCount(self, parent=QModelIndex()) -> int:
+        return 1
+
+    def columnCount(self, parent=QModelIndex()) -> int:
+        return 1
+
+    def data(self, index: QModelIndex, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+
+        if role == Qt.DisplayRole:
+            return self._message
+        elif role == Qt.TextAlignmentRole:
+            return Qt.AlignCenter
+
+        return None
+
+    def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.DisplayRole):
+        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+            return self._headers[section]
+        return None
 
 class MainWindow(QMainWindow):
     """主窗口类"""
@@ -790,6 +821,7 @@ class MainWindow(QMainWindow):
         """初始化主窗口"""
         super(MainWindow, self).__init__()
         self.clipboard = QApplication.clipboard()  # 初始化剪贴板
+        self.current_tweet_category = "top"  # 默认推文类型
         self.init_ui()
 
     def init_ui(self):
@@ -815,6 +847,7 @@ class MainWindow(QMainWindow):
 
         # 连接信号和槽
         self.btnQuery.clicked.connect(self.query_coin_info)
+        self.btnQueryTradeInfo.clicked.connect(self.query_gmgn_info)
 
         # 显示主窗口
         self.ui.show()
@@ -824,6 +857,7 @@ class MainWindow(QMainWindow):
         # 定义所有需要的控件及其名称
         controls = {
             'btnQuery': (QPushButton, '查询按钮'),
+            'btnQueryTradeInfo': (QPushButton, 'GMGN数据查询按钮'),
             'leCA': (QLineEdit, '合约地址输入框'),
             'labelDevInfo': (QLabel, '开发者信息标签'),
             'labelDevHistory': (QLabel, '开发者历史标签'),
@@ -843,6 +877,10 @@ class MainWindow(QMainWindow):
             'labelViews': (QLabel, '浏览标签'),
             'labelOfficalTweets': (QLabel, '官方推文标签'),
             'labelSmartBuy': (QLabel, '智能买入标签'),
+            'tabSocialOptions': (QTabWidget, '推文类型选项卡'),
+            'labelHolderInfo': (QLabel, 'Holder信息'),
+            'labelWalletTag': (QLabel, '钱包分类'),
+            'labelTop10': (QLabel, 'Top10'),
         }
 
         # 检查每个控件
@@ -889,6 +927,7 @@ class MainWindow(QMainWindow):
 
         # 移除之前的按钮样式，使用Material主题样式
         self.btnQuery.setProperty('class', 'primary')  # 使用Material主题的主要按钮样式
+        self.btnQueryTradeInfo.setProperty('class', 'primary')  # 使用Material主题的主要按钮样式
 
         # 设置表格样式，与Material主题配合
         table_delegate = TableStyleDelegate()
@@ -928,6 +967,9 @@ class MainWindow(QMainWindow):
         # 设置默认CA地址
         default_ca = "9DHe3pycTuymFk4H4bbPoAJ4hQrr2kaLDF6J6aAKpump"
         self.leCA.setText(default_ca)
+
+        # 连接推文类型切换事件
+        self.tabSocialOptions.currentChanged.connect(self.on_tweet_tab_changed)
 
     def copy_dev_address(self, address: str):
         """复制开发者地址到剪贴板"""
@@ -1152,7 +1194,7 @@ class MainWindow(QMainWindow):
         # 清空表格
         self.tableDevTrade.setModel(None)
         self.tableDevHistory.setModel(None)
-        
+
         # 清空标签
         self.labelDevInfo.clear()
         self.labelDevHistory.clear()
@@ -1263,7 +1305,7 @@ class MainWindow(QMainWindow):
                     transactions = result.get('data', {}).get('json', {}).get('data', {}).get('parsedTransactions', [])
                     address_labels = result['data']['json']['data']['data'][0]['renderContext']['addressLabelsMap']
                     self.update_smart_money_info(transactions, address_labels)
-                    
+
                     # 5. 获取社交媒体信息
                     self.get_social_media_info(contract_address)
                 else:
@@ -1279,15 +1321,25 @@ class MainWindow(QMainWindow):
         """获取社交媒体信息"""
         # 获取社交统计信息
         url = f"https://www.pump.news/api/trpc/analyze.getBatchTokenDataByTokenAddress,watchlist.batchTokenWatchState?batch=1&input=%7B%220%22%3A%7B%22json%22%3A%7B%22tokenAddresses%22%3A%5B%22{contract_address}%22%5D%7D%7D%2C%221%22%3A%7B%22json%22%3A%7B%22tokenAddresses%22%3A%5B%22{contract_address}%22%5D%7D%7D%7D"
-        
+
         self.social_worker = ApiWorker(requests.get, url)
         self.social_worker.finished.connect(lambda response: self.update_social_info(response.json()))
         self.social_worker.error.connect(self.on_api_error)
         self.social_worker.start()
-        
+
         # 获取推文列表
-        tweets_url = f"https://www.pump.news/api/trpc/utils.getCannyList,service.getServiceCallCount,tweets.getTweetsByTokenAddress?batch=1&input=%7B%220%22%3A%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D%2C%221%22%3A%7B%22json%22%3A%7B%22service%22%3A%22optimize%22%7D%7D%2C%222%22%3A%7B%22json%22%3A%7B%22tokenAddress%22%3A%22{contract_address}%22%2C%22type%22%3A%22filter%22%2C%22category%22%3A%22top%22%7D%7D%7D"
-        
+        self.get_tweets_by_category(contract_address, self.current_tweet_category)
+
+    def get_tweets_by_category(self, contract_address: str, category: str):
+        """根据类型获取推文数据"""
+        # 清除现有数据
+        self.tableSocial.setModel(None)
+
+        # 添加日志
+        self.add_log(f"获取推文", f"正在获取{category}类型推文...")
+
+        tweets_url = f"https://www.pump.news/api/trpc/utils.getCannyList,service.getServiceCallCount,tweets.getTweetsByTokenAddress?batch=1&input=%7B%220%22%3A%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D%2C%221%22%3A%7B%22json%22%3A%7B%22service%22%3A%22optimize%22%7D%7D%2C%222%22%3A%7B%22json%22%3A%7B%22tokenAddress%22%3A%22{contract_address}%22%2C%22type%22%3A%22filter%22%2C%22category%22%3A%22{category}%22%7D%7D%7D"
+
         self.tweets_worker = ApiWorker(requests.get, tweets_url)
         self.tweets_worker.finished.connect(lambda response: self.update_tweets(response.json()))
         self.tweets_worker.error.connect(self.on_api_error)
@@ -1304,11 +1356,11 @@ class MainWindow(QMainWindow):
             self.labelViews.setText(f"浏览：{stats['views']:,}")
             self.labelOfficalTweets.setText(f"官方推文：{stats['official_tweets']}")
             self.labelSmartBuy.setText(f"智能买入：{data[0]['result']['data']['json']['data']['data'][0]['smartbuy']}")
-            
+
             # 更新描述
             summary = data[0]["result"]["data"]["json"]["data"]["data"][0]["analysis"]["lang-zh-CN"]["summary"]
             self.labelCoinDescription.setText(summary)
-            
+
         except Exception as e:
             self.add_log("更新社交统计信息", f"错误 - {str(e)}")
 
@@ -1316,20 +1368,24 @@ class MainWindow(QMainWindow):
         """更新推文信息"""
         try:
             if not tweets_data or not isinstance(tweets_data, list) or len(tweets_data) < 3:
-                self.add_log("更新推文列表", f"错误 - 无效的推文数据格式")
+                error_msg = "获取推文数据失败：数据格式无效"
+                self.add_log("更新推文列表", f"错误 - {error_msg}")
+                self.tableSocial.setModel(NoDataTableModel(error_msg))
                 return
 
             tweets = tweets_data[2]["result"]["data"]["json"]["data"]["data"]["tweets"]
             if not tweets:
-                self.add_log("更新推文列表", "警告 - 没有找到推文数据")
+                error_msg = f"未找到{self.current_tweet_category}类型的推文"
+                self.add_log("更新推文列表", f"提示 - {error_msg}")
+                self.tableSocial.setModel(NoDataTableModel(error_msg))
                 return
 
-            self.add_log("推文列表", f"成功获取 {len(tweets)} 条推文")
+            self.add_log("推文列表", f"成功获取 {len(tweets)} 条{self.current_tweet_category}类型推文")
 
             # 更新社交媒体表格
             model = SocialTableModel(tweets)
             self.tableSocial.setModel(model)
-            
+
             # 设置列宽
             header = self.tableSocial.horizontalHeader()
             header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # 用户名列
@@ -1366,7 +1422,9 @@ class MainWindow(QMainWindow):
             self.tableSocial.clicked.connect(self.on_social_table_clicked)
 
         except Exception as e:
-            self.add_log("更新推文列表", f"错误 - {str(e)}")
+            error_msg = f"更新推文失败：{str(e)}"
+            self.add_log("更新推文列表", f"错误 - {error_msg}")
+            self.tableSocial.setModel(NoDataTableModel(error_msg))
 
     def on_social_table_clicked(self, index):
         """处理社交媒体表格点击事件"""
@@ -1430,7 +1488,8 @@ class MainWindow(QMainWindow):
         if "📋" in html[self.labelDevInfo.hitTest(pos)]:
             self.copy_dev_address(creator)
 
-    def update_smart_money_info(self, transactions_data: List[Dict[str, Any]], address_labels_map: Dict[str, List[Dict[str, str]]]):
+    def update_smart_money_info(self, transactions_data: List[Dict[str, Any]],
+                             address_labels_map: Dict[str, List[Dict[str, str]]]):
         """更新聪明钱信息"""
         processed_data = []
         buy_count = 0
@@ -1548,6 +1607,251 @@ class MainWindow(QMainWindow):
         """显示错误信息并退出程序"""
         print(message)
         sys.exit(1)
+
+    def on_tweet_tab_changed(self, index):
+        """处理推文类型选项卡切换事件"""
+        # 获取当前选中的tab名称
+        current_tab = self.tabSocialOptions.tabText(index).lower()
+
+        # 根据tab名称确定category
+        if "官方" in current_tab:
+            new_category = "official"
+        else:
+            new_category = "top"
+
+        # 如果类型没有改变，不需要重新获取数据
+        if new_category == self.current_tweet_category:
+            return
+
+        # 更新当前类型
+        self.current_tweet_category = new_category
+
+        # 获取当前合约地址
+        contract_address = self.leCA.text().strip()
+        if not contract_address:
+            return
+
+        # 添加日志
+        category_name = "官方" if new_category == "official" else "热门"
+        self.add_log(f"切换推文类型", f"切换到{category_name}推文")
+
+        # 重新获取推文数据
+        self.get_tweets_by_category(contract_address, new_category)
+
+    def query_gmgn_info(self):
+        """查询GMGN数据"""
+        contract_address = self.leCA.text().strip()
+        if not contract_address:
+            self.show_error_message("请输入代币合约地址")
+            return
+
+        # 禁用查询按钮
+        self.btnQueryTradeInfo.setEnabled(False)
+        self.btnQueryTradeInfo.setText("查询中...")
+
+        # 添加日志
+        self.add_log("开始查询GMGN数据", f"合约地址: {contract_address}")
+
+        # 构建API URLs和参数
+        base_params = {
+            "device_id": "520cc162-92cd-4ee6-9add-25e40e359805",
+            "client_id": "gmgn_web_2025.0128.214338",
+            "from_app": "gmgn",
+            "app_ver": "2025.0128.214338",
+            "tz_name": "Asia/Shanghai",
+            "tz_offset": "28800",
+            "app_lang": "en"
+        }
+
+        urls = {
+            "holder": f"https://gmgn.ai/api/v1/token_stat/sol/{contract_address}",
+            "wallet_tags": f"https://gmgn.ai/api/v1/token_wallet_tags_stat/sol/{contract_address}",
+            "top_holders": f"https://gmgn.ai/api/v1/mutil_window_token_security_launchpad/sol/{contract_address}"
+        }
+
+        try:
+            self.add_log("通过本地Node.js服务获取数据")
+            results = {}
+            for name, url in urls.items():
+                response = requests.post("http://localhost:3000", json={
+                    "url": f"{url}?{urllib.parse.urlencode(base_params)}",
+                    "dataType": "gmgn_data"
+                })
+
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get('success'):
+                        results[name] = data.get('response')
+                        self.add_log(f"获取{name}数据", "成功")
+                    else:
+                        self.add_log(f"获取{name}数据", f"失败 - {data.get('error')}")
+                else:
+                    self.add_log(f"获取{name}数据", f"失败 - 状态码: {response.status_code}")
+
+            if results:
+                self.display_gmgn_results(results)
+
+                # 获取Chain.fm数据
+                # chain_fm_response = requests.post("http://localhost:3000", json={
+                #     "url": "https://chain.fm/api/trpc/parsedTransaction.list",
+                #     "dataType": "chain_fm_transactions",
+                #     "token": contract_address
+                # })
+                #
+                # if chain_fm_response.status_code == 200:
+                #     chain_fm_data = chain_fm_response.json()
+                #     if chain_fm_data.get('success'):
+                #         data = chain_fm_data.get('response', {}).get('data', [])
+                #         if data and len(data) > 0:
+                #             result = data[0].get('result', {})
+                #             transactions = result.get('data', {}).get('json', {}).get('data', {}).get('parsedTransactions', [])
+                #             address_labels = result['data']['json']['data']['data'][0]['renderContext']['addressLabelsMap']
+                #             self.update_smart_money_info(transactions, address_labels)
+                #     else:
+                #         self.add_log("获取Chain.fm数据", f"失败 - {chain_fm_data.get('error')}")
+                # else:
+                #     self.add_log("获取Chain.fm数据", f"失败 - 状态码: {chain_fm_response.status_code}")
+            else:
+                self.add_log("获取GMGN数据失败", "所有API请求均失败")
+        except Exception as e:
+            self.add_log("获取数据失败", f"错误: {str(e)}")
+
+        self.btnQueryTradeInfo.setEnabled(True)
+        self.btnQueryTradeInfo.setText("查询GMGN")
+
+    def display_gmgn_results(self, results):
+        """显示GMGN数据结果"""
+        try:
+            # 显示holder数据
+            if 'holder' in results:
+                holder_data = results['holder'].get('data', {})
+                holder_count = holder_data.get('data')['holder_count']
+                blue_chip_count = holder_data.get('data')['bluechip_owner_count']
+                # bluechip_owner_percentage = holder_data.get('data')['bluechip_owner_percentage']
+                # top_rat_trader_percentage = holder_data.get('data')['top_rat_trader_percentage']
+
+                bluechip_owner_percentage = float(holder_data.get('data', {}).get('bluechip_owner_percentage', 0))
+                top_rat_trader_percentage = float(holder_data.get('data', {}).get('top_rat_trader_percentage', 0))
+
+                holder_html = f"""
+                <html>
+                <head>
+                <style>
+                    .container {{ font-family: Arial, sans-serif; padding: 10px; }}
+                    .title {{ color: #1976D2; font-size: 14px; font-weight: bold; margin-bottom: 5px; }}
+                    .stat {{ margin: 5px 0; }}
+                    .label {{ color: #666; }}
+                    .value {{ color: #2196F3; font-weight: bold; }}
+                    .highlight {{ color: #4CAF50; font-weight: bold; }}
+                </style>
+                </head>
+                <body>
+                <div class="container">
+                    <div class="title">持有者统计：</div>
+                        <span class="label">Holder：</span>
+                        <span class="value">{holder_count:,}</span>
+
+                        <span class="label">蓝筹持有人：</span>
+                        <span class="value">{blue_chip_count:,}</span>
+
+                        <span class="label">蓝筹比例：</span>
+                        <span class="value">{bluechip_owner_percentage:.2%}</span>
+
+                        <span class="label">老鼠仓比例：</span>
+                        <span class="value">{top_rat_trader_percentage:.2%}</span>
+                    </div>
+                </div>
+                </body>
+                </html>
+                """
+                self.labelHolderInfo.setText(holder_html)
+
+            # 显示钱包分类统计
+            if 'wallet_tags' in results:
+                wallet_data = results['wallet_tags'].get('data').get('data')
+                wallet_tags_smart_wallets=wallet_data['smart_wallets']
+                wallet_fresh_wallets=wallet_data['fresh_wallets']
+                wallet_tags_renowned_wallets=wallet_data['renowned_wallets']
+                wallet_tags_sniper_wallets=wallet_data['sniper_wallets']
+                wallet_tags_rat_trader_wallets=wallet_data['rat_trader_wallets']
+                wallet_tags_whale_wallets=wallet_data['whale_wallets']
+                wallet_tags_top_wallets=wallet_data['top_wallets']
+                wallet_tags_following_wallets=wallet_data['following_wallets']
+
+                tags_html = f"""
+                <html>
+                <head>
+                <style>
+                    .container {{ font-family: Arial, sans-serif; padding: 10px; }}
+                    .title {{ color: #1976D2; font-size: 14px; font-weight: bold; margin-bottom: 5px; }}
+                    .stat {{ margin: 5px 0; }}
+                    .label {{ color: #666; }}
+                    .value {{ color: #2196F3; font-weight: bold; }}
+                    .highlight {{ color: #4CAF50; font-weight: bold; }}
+                </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="title">地址分类：</div>
+                            <span class="label">聪明钱：</span>
+                            <span class="value">{wallet_tags_smart_wallets:,}</span>
+                            <span class="label">新地址：</span>
+                            <span class="value">{wallet_fresh_wallets:,}</span>
+    
+                            <span class="label">Renowned：</span>
+                            <span class="value">{wallet_tags_renowned_wallets:,}</span>
+                            <span class="label">阻击地址：</span>
+                            <span class="value">{wallet_tags_sniper_wallets:,}</span>
+    
+                            <span class="label">老鼠仓地址：</span>
+                            <span class="value">{wallet_tags_rat_trader_wallets:,}</span>
+                            <span class="label">大户地址：</span>
+                            <span class="value">{wallet_tags_whale_wallets:,}</span>
+    
+                            <span class="label">Top Wallet：</span>
+                            <span class="value">{wallet_tags_top_wallets:,}</span>
+                            <span class="label">关注地址：</span>
+                            <span class="value">{wallet_tags_following_wallets:,}</span>
+                        </div>
+                    </div>
+                </body>
+                </html>
+                """
+                self.labelWalletTag.setText(tags_html)
+
+            # 显示Top 10持有量
+            if 'top_holders' in results:
+                holders_data = results['top_holders'].get('data').get('data').get('security')
+                top_10_holder_rate = float(holders_data.get('top_10_holder_rate'))
+                burn_status=holders_data.get('burn_status')
+
+                holders_html = f"""
+                <html>
+                <head>
+                <style>
+                    .container {{ font-family: Arial, sans-serif; padding: 10px; }}
+                    .title {{ color: #1976D2; font-size: 14px; font-weight: bold; margin-bottom: 5px; }}
+                    .stat {{ margin: 5px 0; }}
+                    .label {{ color: #666; }}
+                    .value {{ color: #2196F3; font-weight: bold; }}
+                    .highlight {{ color: #4CAF50; font-weight: bold; }}
+                </style>
+                </head>
+                <body>
+                <div class="container">
+                    <div class="title">Top 10持有者：</div>
+                        <span class="label">Top 10比例：</span>
+                        <span class="value">{top_10_holder_rate:.2%}</span>
+                        <span class="label">燃烧状态：</span>
+                        <span class="value">{burn_status}</span>
+                </div>
+                </body>
+                </html>
+                """
+                self.labelTop10.setText(holders_html)
+
+        except Exception as e:
+            self.add_log("显示数据时出错", f"错误: {str(e)}")
 
 def main():
     """程序入口函数"""
